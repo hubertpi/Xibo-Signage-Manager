@@ -10,10 +10,16 @@ import mimetypes
 import pathlib
 import threading
 import time
+from io import BytesIO
 from urllib.parse import urljoin
 
 import requests
 import paho.mqtt.client as mqtt
+from zoneinfo import ZoneInfo
+from counter import render_counter_png
+
+COUNTER_NAME = "XSM - Days Since Last Accident.png"
+COUNTER_TAG = "xibo_signage_counter"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("xibo-signage")
@@ -23,6 +29,7 @@ STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 STATE = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {"files": {}}
 STATE.setdefault("files", {})
 STATE.setdefault("controls", {})
+STATE.setdefault("counter", {})
 API = OPTIONS["xibo_url"].rstrip("/") + "/api/"
 PATH = pathlib.Path(OPTIONS["bulletin_folder"])
 ACCIDENT = pathlib.Path(OPTIONS["accident_file"])
@@ -239,6 +246,11 @@ def sync():
             except Exception as exc:
                 LOG.exception("Delete failed for %s", missing)
                 problems.append(f"Delete {missing}: {exc}")
+        try:
+            sync_counter()
+        except Exception as exc:
+            LOG.exception("Accident counter update failed")
+            problems.append(f"Counter: {exc}")
         if problems:
             RUNTIME["errors"] += len(problems)
             RUNTIME["last_error"] = " | ".join(problems)[:500]
@@ -258,13 +270,58 @@ def sync():
         publish()
 
 
+def accident_date():
+    raw = ACCIDENT.read_text(encoding="utf-8").strip()
+    if not raw:
+        raise ValueError("last_accident.txt is empty")
+    day = dt.date.fromisoformat(raw)
+    if day > dt.datetime.now(ZoneInfo(OPTIONS.get("timezone", "America/Chicago"))).date():
+        raise ValueError("last_accident.txt cannot be a future date")
+    return day
+
+
 def accident_days():
     try:
-        day = dt.date.fromisoformat(ACCIDENT.read_text().strip())
-        # Calendar days in system-local time; set TZ on the host if necessary.
-        return max(0, (dt.datetime.now().date() - day).days)
+        return (dt.datetime.now(ZoneInfo(OPTIONS.get("timezone", "America/Chicago"))).date()
+                - accident_date()).days
     except (ValueError, OSError):
         return None
+
+
+def sync_counter():
+    """Push a rendered 1120x400 counter image into the Xibo library."""
+    date = accident_date()
+    days = accident_days()
+    if days is None:
+        raise ValueError("Could not calculate the days since last accident")
+    signature = f"{date.isoformat()}:{days}"
+    state = STATE["counter"]
+    known_id = state.get("media_id")
+    if known_id is not None and state.get("signature") == signature:
+        return
+
+    if known_id is None:
+        found = api("GET", "library", params={"tags": COUNTER_TAG, "exactTags": 1})
+        if not isinstance(found, list):
+            raise ValueError("Xibo counter media search returned invalid data")
+        matching = [item for item in found if isinstance(item, dict)
+                    and item.get("name") == COUNTER_NAME and item.get("mediaId")]
+        if matching:
+            known_id = max(int(item["mediaId"]) for item in matching)
+            LOG.info("Recovered existing Xibo accident counter media %s", known_id)
+
+    image = BytesIO(render_counter_png(days))
+    data = {"name": COUNTER_NAME, "tags": COUNTER_TAG}
+    if known_id is not None:
+        data.update({"oldMediaId": str(known_id),
+                     "updateInLayouts": "1", "deleteOldRevisions": "1"})
+    result = api("POST", "library", data=data,
+                 files={"files": ("days-since-last-accident.png", image, "image/png")})
+    current_id = media_id_from_upload(result, known_id)
+    STATE["counter"] = {"media_id": current_id, "signature": signature}
+    save_state()
+    LOG.info("Updated accident counter: %s days since %s (Xibo media %s)",
+             days, date.isoformat(), current_id)
 
 
 def discovery(component, object_id, name, extra=None):
