@@ -304,6 +304,18 @@ def sync_accident_counter():
     if STATE.get("counter") == desired:
         return
 
+    # A fully populated published widget needs no checkout or republish.
+    # Never repeatedly churn layout versions when the file date is unchanged.
+    expected_markup = render_counter_markup(last_accident)
+    if (int(layout.get("publishedStatusId") or 0) == 1
+            and not layout.get("parentId")
+            and get_widget_option(widget, "name") == WIDGET_NAME
+            and get_widget_option(widget, "embedHtml") == expected_markup
+            and get_widget_option(widget, "embedStyle") == COUNTER_STYLE
+            and get_widget_option(widget, "embedScript") == COUNTER_SCRIPT
+            and not get_widget_option(widget, "embedJavaScript")):
+        return
+
     # Published layouts need a draft checkout before editing in Xibo 4.5.
     if (int(layout.get("publishedStatusId") or 0) == 1
             and not layout.get("parentId")):

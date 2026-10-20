@@ -5,13 +5,11 @@ import html
 WIDGET_NAME = "XSM - Accident Counter"
 LEGACY_WIDGET_NAME = "Days Since Last Incident"
 COUNTER_STYLE = """
-<style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
 #xsm-accident-counter{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#0867b3;text-align:center;font-family:Arial,Helvetica,sans-serif}
-#xsm-days{font-size:256px;font-weight:700;line-height:1;letter-spacing:-4px;white-space:nowrap;max-width:100%}
-#xsm-counter-label{font-size:77px;font-weight:400;line-height:1.1;white-space:nowrap}
-</style>
+#xsm-days{font-size:226px;font-weight:700;line-height:1;letter-spacing:-4px;white-space:nowrap;max-width:100%}
+#xsm-counter-label{font-size:59px;font-weight:400;line-height:1.1;white-space:nowrap}
 """.strip()
 COUNTER_SCRIPT = r"""<script>
 (function(){

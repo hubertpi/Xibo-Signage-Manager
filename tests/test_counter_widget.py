@@ -18,6 +18,8 @@ class CounterWidgetTests(unittest.TestCase):
         self.assertIn("Days Since Last Accident", render_counter_markup(date(2026, 10, 1)))
         self.assertIn("setInterval(update,60000)", COUNTER_SCRIPT)
         self.assertIn("#0867b3", COUNTER_STYLE)
+        self.assertNotIn("<style>", COUNTER_STYLE)
+        self.assertNotIn("</style>", COUNTER_STYLE)
 
     def test_legacy_placeholder_is_detected(self):
         layouts=[{"layout":"Main Digital Bulletin - 4K Replica","layoutId":13,

@@ -8,7 +8,7 @@ Add this repository to Home Assistant's add-on/app store:
 
 `https://github.com/hubertpi/Xibo-Signage-Manager`
 
-The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.3.1`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
+The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.3.2`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
 
 **Check the GitHub Actions run has finished and that the GHCR package is public before installing.** Newly-created GitHub Container Registry packages may be private until their visibility is changed in the package settings.
 
@@ -20,7 +20,7 @@ Configure the app with your Xibo CMS URL and API client credentials, plus your M
 
 These are Supervisor-mounted Home Assistant paths corresponding to your Debian host's `/var/lib/homeassistant/share/digital_signage`. Do not put secrets in this repository or Samba.
 
-## Sync behavior (v0.3.1)
+## Sync behavior (v0.3.2)
 
 - **New file:** Upload as Xibo library media with configured tag and `XSM - ` name prefix to avoid clashes with manually uploaded files.
 - **Existing tagged file:** Detect an existing managed name and adopt its media ID after a previous interrupted upload; compare the Xibo MD5 with the local source to avoid an unnecessary upload. Untagged existing media is left untouched.
@@ -31,7 +31,7 @@ These are Supervisor-mounted Home Assistant paths corresponding to your Debian h
 - Supports JPG/JPEG/PNG/GIF/PDF. Actual PDF display depends on your Xibo player.
 - State persists in the add-on configuration directory. The sync interval and auto-sync MQTT controls also persist across restarts.
 
-## Live HTML accident counter (v0.3.1)
+## Live HTML accident counter (v0.3.2)
 
 The add-on can **upgrade the existing 'Days Since Last Incident' embedded placeholder** in the imported 4K layout directly through the API, replacing its markup/style/script with the dynamic blue counter. You do not need to re-import the layout for the counter. Fresh installations can import the revised 4K ZIP with the `XSM - Accident Counter` widget already embedded.
 
@@ -54,3 +54,7 @@ This release manages media library assets only. In Xibo, create a dynamic playli
 GitHub Actions builds and publishes a multi-architecture image for each new release version configured in `xibo_signage_manager/config.yaml`. Wait for publishing before using the version in Home Assistant. The workflow uses Docker Buildx and GHCR with the repository's `GITHUB_TOKEN`.
 
 The `Dockerfile` uses a self-contained Python Alpine base and does not depend on an undefined Supervisor `BUILD_FROM` argument.
+
+### v0.3.2 counter fix
+
+Sends all Embedded widget properties on every change because Xibo clears omitted properties, including CSS and HEAD script. The stylesheet is raw CSS without HTML style tags (Xibo wraps it automatically). The add-on logs Xibo's response body on HTTP 403, which may indicate an active CMS edit lock or missing layout.modify permission. No layout reimport is required for this repair.
