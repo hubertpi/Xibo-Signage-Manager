@@ -8,7 +8,7 @@ Add this repository to Home Assistant's add-on/app store:
 
 `https://github.com/hubertpi/Xibo-Signage-Manager`
 
-The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.3.0`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
+The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.2.1`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
 
 **Check the GitHub Actions run has finished and that the GHCR package is public before installing.** Newly-created GitHub Container Registry packages may be private until their visibility is changed in the package settings.
 
@@ -20,7 +20,7 @@ Configure the app with your Xibo CMS URL and API client credentials, plus your M
 
 These are Supervisor-mounted Home Assistant paths corresponding to your Debian host's `/var/lib/homeassistant/share/digital_signage`. Do not put secrets in this repository or Samba.
 
-## Sync behavior (v0.3.0)
+## Sync behavior (v0.2.1)
 
 - **New file:** Upload as Xibo library media with configured tag and `XSM - ` name prefix to avoid clashes with manually uploaded files.
 - **Existing tagged file:** Detect an existing managed name and adopt its media ID after a previous interrupted upload; compare the Xibo MD5 with the local source to avoid an unnecessary upload. Untagged existing media is left untouched.
@@ -30,16 +30,6 @@ These are Supervisor-mounted Home Assistant paths corresponding to your Debian h
 - Ignore source files younger than ten seconds, then verify stable size and modification time to avoid importing partial Samba copies.
 - Supports JPG/JPEG/PNG/GIF/PDF. Actual PDF display depends on your Xibo player.
 - State persists in the add-on configuration directory. The sync interval and auto-sync MQTT controls also persist across restarts.
-
-## Automatic Days Since Last Accident counter
-
-The add-on reads `/share/digital_signage/config/last_accident.txt`, containing an ISO date such as `2026-10-01`.
-Every synchronization checks the date using `America/Chicago` calendar days (configurable via `timezone`).
-When the date changes or midnight advances the count, it generates a 1120×400 PNG matching the blue counter reference and uploads/replaces the tagged media in Xibo's library.
-
-**Xibo library item:** `XSM - Days Since Last Accident.png` (tag `xibo_signage_counter`). Unlike the bulletin media this stays out of the bulletin playlist. It must be assigned once to the accident-counter region in a layout; subsequent media replacements use Xibo's `updateInLayouts=1`, so the displayed image updates automatically without layout edits. This release does not automatically bind that first image to the counter region.
-
-No additional HTTP endpoint or Home Assistant frontend dependency is required. Xibo's normal media/player polling determines how soon a changed counter appears on screen.
 
 ## MQTT device
 
