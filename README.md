@@ -1,60 +1,40 @@
 # Xibo Signage Manager
 
-Home Assistant add-on for synchronizing a Samba bulletin folder to **Xibo CMS 4.5.1**, with MQTT auto-discovery. No Ingress web UI.
+Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.4.0`.
 
-## Install
+## Installation
 
-Add this repository to Home Assistant's add-on/app store:
+Add `https://github.com/hubertpi/Xibo-Signage-Manager` to the Home Assistant add-on repository and configure the Xibo CMS URL and OAuth client credentials. MQTT creates a Xibo Signage Manager device with sync status and controls.
 
-`https://github.com/hubertpi/Xibo-Signage-Manager`
+## Source paths
 
-The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.3.2`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
+- Bulletins: `/share/digital_signage/bulletins` (JPG/JPEG/PNG/GIF/PDF)
+- Safety date: `/share/digital_signage/config/last_accident.txt`, containing an ISO date `YYYY-MM-DD`
+- Calendar: optional private `events_ics_url` and `birthdays_ics_url` in add-on Configuration. Never commit feed URLs/tokens to GitHub.
+- CMS layout: `counter_layout_name`, default `Main Digital Bulletin - 4K Replica`
+- Managed media tag: `xibo_signage_manager` (configurable)
 
-**Check the GitHub Actions run has finished and that the GHCR package is public before installing.** Newly-created GitHub Container Registry packages may be private until their visibility is changed in the package settings.
+On each sync:
+1. Synchronize changed/new/deleted bulletin files into Xibo media library using the management tag and `oldMediaId` replacements.
+2. Find the named layout. For the `Bulletin Slideshow` region, remove only the specifically named original sample widget (if present), then convert the region playlist into an automatically maintained Xibo dynamic playlist matching the media tag. It picks up future uploads and deletions directly from Xibo, without manually assigning media to a region.
+3. Update the existing `XSM - Accident Counter` Embedded widget using full Xibo HTML/CSS/JavaScript properties. The displayed figure is **SVG text, not an image**; the browser recalculates the number of calendar days every minute in America/Chicago time.
+4. Fetch both ICS feeds server-side, expand recurring events and exceptions, keep upcoming events, escape content, then update the Events/Birthdays Embedded widget. Its header and content slide upward together every 10 seconds. Until feed URLs are entered, the panels explicitly show 'calendar not connected' and **never invented sample events**. URLs stay in add-on configuration and are not embedded in the player.
+5. Make **one** checkout/publish transaction for the entire layout when changes are necessary. Changes are deferred if the Xibo editor holds a lock (Xibo locks last up to five minutes) or if the API account lacks layout.modify.
 
-Configure the app with your Xibo CMS URL and API client credentials, plus your MQTT settings. Defaults:
+The companion `Main Digital Bulletin - 4K Complete.zip` includes this layout ready to import once. **The add-on can also upgrade the previously imported version in place**, provided its region names are unchanged. No manual widgets or playlists need to be added.
 
-- Bulletins: `/share/digital_signage/bulletins`
-- Incident-date text file: `/share/digital_signage/config/last_accident.txt`
-- Managed Xibo tag: `xibo_signage_manager`
+For private Google calendars, obtain the **Secret address in iCal format** under that calendar's Integrate calendar settings. The built-in Google Birthdays calendar may not offer a direct ICS URL; if so, use an exportable secondary calendar. A calendar must be accessible over HTTPS from the add-on.
 
-These are Supervisor-mounted Home Assistant paths corresponding to your Debian host's `/var/lib/homeassistant/share/digital_signage`. Do not put secrets in this repository or Samba.
+## Behavior / limitations
 
-## Sync behavior (v0.3.2)
-
-- **New file:** Upload as Xibo library media with configured tag and `XSM - ` name prefix to avoid clashes with manually uploaded files.
-- **Existing tagged file:** Detect an existing managed name and adopt its media ID after a previous interrupted upload; compare the Xibo MD5 with the local source to avoid an unnecessary upload. Untagged existing media is left untouched.
-- **Changed file:** Re-upload using Xibo's documented `oldMediaId`, `updateInLayouts=1`, `deleteOldRevisions=1` mechanism.
-- **Deleted file:** DELETE the Xibo media by its tracked ID using `forceDelete=1` and `purge=1`. This intentionally removes the media even if used in a layout, since the share is authoritative.
-- Only media IDs recorded in the add-on's persistent state (including adopted tagged media) are eligible for replacement or deletion. Unrelated Xibo library media is not touched.
-- Ignore source files younger than ten seconds, then verify stable size and modification time to avoid importing partial Samba copies.
-- Supports JPG/JPEG/PNG/GIF/PDF. Actual PDF display depends on your Xibo player.
-- State persists in the add-on configuration directory. The sync interval and auto-sync MQTT controls also persist across restarts.
-
-## Live HTML accident counter (v0.3.2)
-
-The add-on can **upgrade the existing 'Days Since Last Incident' embedded placeholder** in the imported 4K layout directly through the API, replacing its markup/style/script with the dynamic blue counter. You do not need to re-import the layout for the counter. Fresh installations can import the revised 4K ZIP with the `XSM - Accident Counter` widget already embedded.
-
-The add-on reads `/share/digital_signage/config/last_accident.txt` (single ISO date) on each sync. It locates the widget by the configured `counter_layout_name`, updates only the embedded HTML date attribute via Xibo's `PUT /playlist/widget/{widgetId}` API, then publishes the layout if needed. This updates the Xibo layout only when the DATE changes. JavaScript in the Xibo player recalculates local calendar days once per minute in the America/Chicago time zone; **no counter image is created** and Home Assistant is not used for rendering.
-
-`counter_layout_name` defaults to `Main Digital Bulletin - 4K Replica`. If you rename the imported layout, update that option. Until the new widget has been imported, the add-on logs that the widget was not found, while bulletin syncing continues.
-
-Publishing the modified layout follows Xibo 4.5's draft/checkout API and needs a test against your CMS. If editing a published layout is blocked, the add-on reports an error rather than altering unrelated widgets.
-
-## MQTT device
-
-Discovery creates **Xibo Signage Manager** with Xibo connectivity, sync status, last successful sync, last duration, bulletin count, sync errors, last error, days since last accident, adjustable sync interval, auto sync switch and sync now button.
-
-## Xibo layout connection
-
-This release manages media library assets only. In Xibo, create a dynamic playlist filtered to the `xibo_signage_manager` tag and assign it to your slideshow region. Google Calendar integration, PDF rendering/playback and custom slide transitions will be tested separately.
+- Media filenames are prefixed `XSM -` for namespacing; unrelated Xibo library media are not modified.
+- Deletes only previously tracked managed media. State persists under the add-on configuration directory.
+- Source files younger than 10 seconds are deferred to avoid incomplete Samba copies.
+- ICS feeds are fetched every sync interval (default 5 minutes); maximum 5 MB response, 90-day lookahead, 8 items per calendar.
+- Xibo player schedule and file polling determine how quickly media and layout changes appear.
+- PDF rendering varies by Xibo player platform. Fly-left transition on Xibo playlist items is player dependent and should be checked in Preview and on the target player.
+- The built-in sample safety page and sample events are removed; there is no substitute static content.
 
 ## Build
 
-GitHub Actions builds and publishes a multi-architecture image for each new release version configured in `xibo_signage_manager/config.yaml`. Wait for publishing before using the version in Home Assistant. The workflow uses Docker Buildx and GHCR with the repository's `GITHUB_TOKEN`.
-
-The `Dockerfile` uses a self-contained Python Alpine base and does not depend on an undefined Supervisor `BUILD_FROM` argument.
-
-### v0.3.2 counter fix
-
-Sends all Embedded widget properties on every change because Xibo clears omitted properties, including CSS and HEAD script. The stylesheet is raw CSS without HTML style tags (Xibo wraps it automatically). The add-on logs Xibo's response body on HTTP 403, which may indicate an active CMS edit lock or missing layout.modify permission. No layout reimport is required for this repair.
+GitHub Actions runs Python tests and publishes images on source changes. The add-on uses a Python Alpine base and requires no compilation on Home Assistant.

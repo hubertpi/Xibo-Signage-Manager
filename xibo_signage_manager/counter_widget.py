@@ -1,83 +1,56 @@
-"""Build the Xibo Embedded widget body updated by the synchronizer."""
+"""Responsive SVG text safety counter for Xibo 4.5 Embedded widgets."""
 import datetime as dt
 import html
-
 WIDGET_NAME = "XSM - Accident Counter"
 LEGACY_WIDGET_NAME = "Days Since Last Incident"
-COUNTER_STYLE = """
-*{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
-#xsm-accident-counter{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#0867b3;text-align:center;font-family:Arial,Helvetica,sans-serif}
-#xsm-days{font-size:226px;font-weight:700;line-height:1;letter-spacing:-4px;white-space:nowrap;max-width:100%}
-#xsm-counter-label{font-size:59px;font-weight:400;line-height:1.1;white-space:nowrap}
-""".strip()
-COUNTER_SCRIPT = r"""<script>
-(function(){
-  var timezone='America/Chicago',started=false;
-  function chicagoDay(){
-    var segments=new Intl.DateTimeFormat('en-US',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
-    var p={};for(var i=0;i<segments.length;i++)p[segments[i].type]=segments[i].value;
-    return [p.year,p.month,p.day].join('-');
-  }
-  function epochDay(s){
-    var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-    if(!m)return NaN;
-    var ms=Date.UTC(+m[1],+m[2]-1,+m[3]),d=new Date(ms);
-    if(d.getUTCFullYear()!==+m[1]||d.getUTCMonth()!==+m[2]-1||d.getUTCDate()!==+m[3])return NaN;
-    return ms/86400000;
-  }
-  function update(){
-    var box=document.getElementById('xsm-accident-counter');
-    var count=document.getElementById('xsm-days');
-    if(!box||!count)return;
-    var days=epochDay(chicagoDay())-epochDay(box.getAttribute('data-last-accident'));
-    count.textContent=Number.isFinite(days)&&days>=0?String(days):'—';
-    var size=256;count.style.fontSize=size+'px';
-    while(size>70&&count.scrollWidth>box.clientWidth-35){size-=5;count.style.fontSize=size+'px';}
-  }
-  function init(){if(started)return;started=true;update();setInterval(update,60000);}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
-  else init();
-  window.EmbedInit=init;
+COUNTER_STYLE = """*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent!important}#xsm-accident-counter{width:100%;height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:transparent}"""
+COUNTER_SCRIPT = r'''<script>
+(function(){var started=false;
+function day(s){var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');if(!m)return NaN;var u=Date.UTC(+m[1],+m[2]-1,+m[3]),d=new Date(u);return(d.getUTCFullYear()===+m[1]&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[3])?u/86400000:NaN;}
+function today(){var p=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());var o={};for(var i=0;i<p.length;i++)o[p[i].type]=p[i].value;return o.year+'-'+o.month+'-'+o.day;}
+function update(){var b=document.getElementById('xsm-accident-counter'),t=document.getElementById('xsm-days');if(!b||!t)return;var n=day(today())-day(b.getAttribute('data-last-accident'));t.textContent=isFinite(n)&&n>=0?String(n):'—';t.setAttribute('font-size',String(n>=100000?130:n>=10000?170:235));}
+function init(){if(started)return;started=true;update();window.setInterval(update,60000);}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();window.EmbedInit=init;
 })();
-</script>"""
+</script>'''
 
+def render_counter_markup(last_accident:dt.date)->str:
+    d=html.escape(last_accident.isoformat(),quote=True)
+    return f'''<div id="xsm-accident-counter" data-xsm-accident-counter="1" data-last-accident="{d}">
+<svg viewBox="0 0 1120 400" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="Days since last accident" style="display:block;width:100%;height:100%;overflow:visible;">
+<text id="xsm-days" x="560" y="225" fill="#0867b3" font-family="Arial,Helvetica,sans-serif" font-size="235" font-weight="700" text-anchor="middle">—</text>
+<text x="560" y="343" fill="#0867b3" font-family="Arial,Helvetica,sans-serif" font-size="65" font-weight="500" text-anchor="middle">Days Since Last Accident</text>
+</svg></div>'''
 
-def render_counter_markup(last_accident: dt.date) -> str:
-    value = html.escape(last_accident.isoformat(), quote=True)
-    return (
-        '<div id="xsm-accident-counter" data-xsm-accident-counter="1" '
-        f'data-last-accident="{value}">'
-        '<div id="xsm-days" aria-label="Days since last accident">—</div>'
-        '<div id="xsm-counter-label">Days Since Last Accident</div>'
-        '</div>'
-    )
-
-def get_widget_option(widget: dict, key: str):
-    for option in widget.get("widgetOptions", []):
-        if option.get("option") == key:
-            return option.get("value")
+def get_widget_option(widget:dict,key:str):
+    for opt in widget.get("widgetOptions",[]) or []:
+        if opt.get("option")==key:return opt.get("value")
     return None
 
-def counter_targets(layouts: list, target_name: str):
-    """Find only widgets intentionally marked as this add-on's counter."""
-    targets = []
+def build_widget_payload(last_accident:dt.date,widget:dict):
+    return {"name":WIDGET_NAME,"useDuration":"1",
+            "duration":str(widget.get("duration") or 3600),
+            "enableStat":get_widget_option(widget,"enableStat") or "Inherit",
+            "transparency":"1","scaleContent":"1","isPreNavigate":"0",
+            "embedHtml":render_counter_markup(last_accident),
+            "embedStyle":COUNTER_STYLE,"embedJavaScript":"","embedScript":COUNTER_SCRIPT}
+
+def widget_needs_update(widget:dict,payload:dict):
+    return any((get_widget_option(widget,k) or "")!=payload[k]
+        for k in ("name","embedHtml","embedStyle","embedScript","embedJavaScript"))
+
+def counter_targets(layouts:list,target_name:str):
+    targets=[]
     for layout in layouts:
-        if layout.get("layout") != target_name:
-            continue
+        if layout.get("layout")!=target_name:continue
         for region in layout.get("regions") or []:
-            playlists = [region.get("regionPlaylist"), region.get("playlist")]
-            if isinstance(region.get("playlists"), list):
-                playlists += region["playlists"]
+            playlists=[region.get("regionPlaylist"),region.get("playlist")]
+            if isinstance(region.get("playlists"),list):playlists+=region["playlists"]
             for playlist in playlists:
-                if not isinstance(playlist, dict):
-                    continue
+                if not isinstance(playlist,dict):continue
                 for widget in playlist.get("widgets") or []:
-                    name = get_widget_option(widget, "name")
-                    markup = get_widget_option(widget, "embedHtml") or ""
-                    if widget.get("type") == "embedded" and (
-                        name in (WIDGET_NAME, LEGACY_WIDGET_NAME)
-                        or 'data-xsm-accident-counter="1"' in markup
-                    ):
-                        targets.append((layout, widget))
+                    name=get_widget_option(widget,"name")
+                    markup=get_widget_option(widget,"embedHtml") or ""
+                    if widget.get("type")=="embedded" and (name in (WIDGET_NAME,LEGACY_WIDGET_NAME)
+                       or 'data-xsm-accident-counter="1"' in markup):
+                        targets.append((layout,widget))
     return targets

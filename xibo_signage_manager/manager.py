@@ -15,6 +15,7 @@ from urllib.parse import urljoin
 import requests
 import paho.mqtt.client as mqtt
 from counter_widget import counter_targets, render_counter_markup, get_widget_option, WIDGET_NAME, COUNTER_STYLE, COUNTER_SCRIPT
+from layout_sync import sync_live_layout
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("xibo-signage")
@@ -242,12 +243,12 @@ def sync():
                 LOG.exception("Delete failed for %s", missing)
                 problems.append(f"Delete {missing}: {exc}")
         try:
-            sync_accident_counter()
+            sync_live_layout(api, OPTIONS, ACCIDENT)
         except (LookupError, ValueError, OSError, requests.HTTPError, RuntimeError) as exc:
-            LOG.warning("Accident counter date not yet synchronized: %s", exc)
+            LOG.warning("Live Xibo layout not yet synchronized: %s", exc)
             problems.append(f"Counter: {exc}")
         except Exception as exc:
-            LOG.exception("Accident counter synchronization failed")
+            LOG.exception("Live Xibo layout synchronization failed")
             problems.append(f"Counter: {exc}")
         if problems:
             RUNTIME["errors"] += len(problems)
