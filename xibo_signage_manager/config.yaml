@@ -1,0 +1,40 @@
+name: Xibo Signage Manager
+version: "0.1.0"
+slug: xibo_signage_manager
+description: Synchronize Samba bulletin media into Xibo CMS and expose MQTT controls.
+url: https://github.com/hubertpi/Xibo-Signage-Manager
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+map:
+  - share:ro
+  - addon_config:rw
+services:
+  - mqtt:want
+options:
+  xibo_url: ""
+  xibo_client_id: ""
+  xibo_client_secret: ""
+  mqtt_host: core-mosquitto
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+  bulletin_folder: /share/digital_signage/bulletins
+  accident_file: /share/digital_signage/config/last_accident.txt
+  sync_interval_minutes: 5
+  media_tag: xibo_signage_manager
+schema:
+  xibo_url: str
+  xibo_client_id: str
+  xibo_client_secret: password
+  mqtt_host: str
+  mqtt_port: port
+  mqtt_username: str?
+  mqtt_password: password?
+  bulletin_folder: str
+  accident_file: str
+  sync_interval_minutes: int(1,1440)
+  media_tag: str
