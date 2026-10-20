@@ -1,5 +1,6 @@
 name: Xibo Signage Manager
-version: "0.1.0"
+version: "0.2.0"
+image: ghcr.io/hubertpi/xibo-signage-manager
 slug: xibo_signage_manager
 description: Synchronize Samba bulletin media into Xibo CMS and expose MQTT controls.
 url: https://github.com/hubertpi/Xibo-Signage-Manager

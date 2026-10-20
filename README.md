@@ -1,38 +1,45 @@
 # Xibo Signage Manager
 
-Home Assistant add-on (no Ingress) for importing bulletin images and PDFs from the existing Home Assistant Samba share into Xibo CMS 4.5.1 with MQTT auto-discovery.
+Home Assistant add-on for synchronizing a Samba bulletin folder to **Xibo CMS 4.5.1**, with MQTT auto-discovery. No Ingress web UI.
 
-## Installation
+## Install
 
-In Home Assistant **Settings → Add-ons → Add-on Store → Repositories**, add:
+Add this repository to Home Assistant's add-on/app store:
 
 `https://github.com/hubertpi/Xibo-Signage-Manager`
 
-Install **Xibo Signage Manager**. Configure the Xibo CMS URL and API Client ID/Secret created for **Bulletin Sync**, plus the MQTT broker settings. The standard folder defaults are:
+The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.2.0`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
+
+**Check the GitHub Actions run has finished and that the GHCR package is public before installing.** Newly-created GitHub Container Registry packages may be private until their visibility is changed in the package settings.
+
+Configure the app with your Xibo CMS URL and API client credentials, plus your MQTT settings. Defaults:
 
 - Bulletins: `/share/digital_signage/bulletins`
-- Incident date: `/share/digital_signage/config/last_accident.txt`
+- Incident-date text file: `/share/digital_signage/config/last_accident.txt`
+- Managed Xibo tag: `xibo_signage_manager`
 
-**Important:** Add-on container uses the Supervisor-mounted `/share`, not the Debian host path `/var/lib/homeassistant/share`. Credentials go in the HA add-on config; do not commit them to Git.
+These are Supervisor-mounted Home Assistant paths corresponding to your Debian host's `/var/lib/homeassistant/share/digital_signage`. Do not put secrets in this repository or Samba.
 
-## Initial release: 0.1.0
+## Sync behavior (v0.2.0)
 
-- Uploads **new** stable .jpg/.jpeg/.png/.gif/.pdf files to the Xibo library, with tag `xibo_signage_manager`.
-- Records SHA-256 hashes and imported Xibo IDs in persistent add-on state.
-- Discovers MQTT device with sync button, interval number, auto-sync switch, connectivity, last-successful-sync timestamp, last error, file count, and accident counter.
-- **Does not automatically create Xibo playlists or update the existing layout**. Create a dynamic playlist in Xibo filtered on the specified tag and insert it into the slideshow region.
-- **Does not automatically replace or remove library media yet.** Changed and deleted source files are reported as warnings to avoid deleting in-use Xibo media. This is an early integration/test release, not yet a full bidirectional reconciler.
-- PDF API acceptance and rendering must be verified with your actual Xibo installation/player. Some media types may require additional modules or conversion.
-- MQTT controls currently reset to configured defaults on add-on restart; persistence of control changes is planned.
-- The accident counter is only an HA MQTT sensor so far; it is **not** embedded into the Xibo layout yet.
-- Google Calendar and layout transitions are outside this add-on release.
+- **New file:** Upload as Xibo library media with configured tag.
+- **Changed file:** Re-upload using Xibo's documented `oldMediaId`, `updateInLayouts=1`, `deleteOldRevisions=1` mechanism.
+- **Deleted file:** DELETE the Xibo media by its tracked ID using `forceDelete=1` and `purge=1`. This intentionally removes the media even if used in a layout, since the share is authoritative.
+- Only media IDs recorded in the add-on's persistent state are eligible for replacement or deletion. Unrelated Xibo library media is not touched.
+- Ignore source files younger than ten seconds, then verify stable size and modification time to avoid importing partial Samba copies.
+- Supports JPG/JPEG/PNG/GIF/PDF. Actual PDF display depends on your Xibo player.
+- State persists in the add-on configuration directory. The sync interval and auto-sync MQTT controls also persist across restarts.
 
-## Initial checks
+## MQTT device
 
-After installing and starting, look at the add-on log for imported file IDs and verify Xibo **Library** has media with tag `xibo_signage_manager`. In HA MQTT integration you should see the **Xibo Signage Manager** device.
+Discovery creates **Xibo Signage Manager** with Xibo connectivity, sync status, last successful sync, last duration, bulletin count, sync errors, last error, days since last accident, adjustable sync interval, auto sync switch and sync now button.
 
-Only connect your dedicated dynamic playlist after confirming the uploaded library entries and their tags. Never remove unrelated Xibo assets.
+## Xibo layout connection
 
-## Security
+This release manages media library assets only. In Xibo, create a dynamic playlist filtered to the `xibo_signage_manager` tag and assign it to your slideshow region. Google Calendar integration, PDF rendering/playback and custom slide transitions will be tested separately.
 
-The configured API application needs library permission. Keep Client Secret and MQTT password in private add-on settings, not Samba or repository. The share is mounted read-only to the add-on.
+## Build
+
+GitHub Actions builds and publishes a multi-architecture image for each new release version configured in `xibo_signage_manager/config.yaml`. Wait for publishing before using the version in Home Assistant. The workflow uses Docker Buildx and GHCR with the repository's `GITHUB_TOKEN`.
+
+The `Dockerfile` uses a self-contained Python Alpine base and does not depend on an undefined Supervisor `BUILD_FROM` argument.

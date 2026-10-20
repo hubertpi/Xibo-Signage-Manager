@@ -1,13 +1,12 @@
-"""Xibo signage media importer / MQTT device (initial release).
+"""Xibo media folder synchronizer and Home Assistant MQTT device.
 
-Uploads new stable files to Xibo. Intentionally never deletes or overwrites media
-until safe replacement and dynamic-playlist semantics have been validated.
+Only media IDs created by this add-on are replaced or deleted.
 """
 import datetime as dt
 import hashlib
 import json
 import logging
-import os
+import mimetypes
 import pathlib
 import threading
 import time
@@ -22,6 +21,8 @@ OPTIONS = json.loads(pathlib.Path("/data/options.json").read_text())
 STATE_FILE = pathlib.Path("/config/xibo_signage_manager_state.json")
 STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 STATE = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {"files": {}}
+STATE.setdefault("files", {})
+STATE.setdefault("controls", {})
 API = OPTIONS["xibo_url"].rstrip("/") + "/api/"
 PATH = pathlib.Path(OPTIONS["bulletin_folder"])
 ACCIDENT = pathlib.Path(OPTIONS["accident_file"])
@@ -32,7 +33,8 @@ DEVICE = {"identifiers": [PREFIX], "name": "Xibo Signage Manager",
 LOCK = threading.RLock()
 RUNTIME = {"connection": False, "status": "starting", "last_sync": None,
            "last_duration": None, "bulletins": 0, "errors": 0, "last_error": "",
-           "auto": True, "interval": int(OPTIONS["sync_interval_minutes"])}
+           "auto": STATE["controls"].get("auto", True),
+           "interval": int(STATE["controls"].get("interval", OPTIONS["sync_interval_minutes"]))}
 DUE = threading.Event()
 TOKEN = None
 TOKEN_EXPIRY = 0
@@ -102,13 +104,40 @@ def is_stable(path):
     return a.st_size == b.st_size and a.st_mtime_ns == b.st_mtime_ns
 
 
+def media_id_from_upload(result, fallback=None):
+    """Xibo responses can be objects or collections, depending on API config."""
+    items = result if isinstance(result, list) else [result]
+    for item in items:
+        if isinstance(item, dict):
+            for key in ("mediaId", "media_id", "id"):
+                if item.get(key) is not None:
+                    return int(item[key])
+            if isinstance(item.get("media"), dict) and item["media"].get("mediaId"):
+                return int(item["media"]["mediaId"])
+    if fallback is not None:
+        return int(fallback)
+    raise ValueError(f"Xibo upload did not return a media ID: {str(result)[:300]}")
+
+
+def upload(path, old_id=None):
+    data = {"name": path.name, "tags": TAG}
+    if old_id is not None:
+        data.update({"oldMediaId": str(old_id),
+                     "updateInLayouts": "1", "deleteOldRevisions": "1"})
+    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    with path.open("rb") as src:
+        result = api("POST", "library", data=data,
+                     files={"files": (path.name, src, mime)})
+    return media_id_from_upload(result, old_id)
+
+
 def sync():
     start = time.monotonic()
     RUNTIME["status"] = "syncing"
     publish()
     problems = []
     try:
-        api("GET", "library", params={"start": 0, "length": 1})
+        api("GET", "library", params={"mediaId": 0})
         RUNTIME["connection"] = True
         files = scan()
         RUNTIME["bulletins"] = len(files)
@@ -123,34 +152,28 @@ def sync():
                 prior = STATE["files"].get(path.name)
                 if prior and prior.get("sha256") == digest:
                     continue
-                if prior:
-                    # Do not create duplicate playlist entries while replacement
-                    # rules are not yet validated against the installed CMS.
-                    LOG.warning("Changed media requires manual replacement in v0.1: %s", path.name)
-                    problems.append(f"Changed file pending replacement: {path.name}")
-                    continue
-                with path.open("rb") as f:
-                    result = api("POST", "library",
-                                 data={"name": path.name, "tags": TAG},
-                                 files={"files": (path.name, f, "application/pdf"
-                                         if path.suffix.lower() == ".pdf"
-                                         else "image/jpeg" if path.suffix.lower() in
-                                         (".jpg", ".jpeg") else "image/png")})
-                media_id = result.get("mediaId") if isinstance(result, dict) else None
-                if not media_id:
-                    raise ValueError(f"Xibo upload returned no mediaId for {path.name}: {str(result)[:250]}")
-                STATE["files"][path.name] = {"sha256": digest, "media_id": media_id}
+                old_id = prior.get("media_id") if prior else None
+                new_id = upload(path, old_id)
+                STATE["files"][path.name] = {"sha256": digest, "media_id": new_id}
                 save_state()
-                LOG.info("Imported %s as Xibo media %s", path.name, media_id)
+                action = "Replaced" if old_id else "Imported"
+                LOG.info("%s %s: media %s -> %s", action, path.name, old_id, new_id)
             except Exception as exc:
-                LOG.exception("Media import error: %s", path.name)
+                LOG.exception("Import/update failed for %s", path.name)
                 problems.append(f"{path.name}: {exc}")
-        removed = set(STATE["files"]) - present
-        if removed:
-            # Never delete foreign content or an in-use media library item.
-            LOG.warning("Removed from share, manual Xibo cleanup required: %s",
-                        ", ".join(sorted(removed)))
-            problems.append("Removed files require manual Xibo cleanup: " + ", ".join(sorted(removed)))
+        for missing in sorted(set(STATE["files"]) - present):
+            media_id = STATE["files"][missing].get("media_id")
+            try:
+                if media_id is not None:
+                    # Only IDs previously uploaded and recorded by this add-on.
+                    api("DELETE", f"library/{int(media_id)}",
+                        data={"forceDelete": "1", "purge": "1"})
+                del STATE["files"][missing]
+                save_state()
+                LOG.info("Deleted removed bulletin %s (media %s)", missing, media_id)
+            except Exception as exc:
+                LOG.exception("Delete failed for %s", missing)
+                problems.append(f"Delete {missing}: {exc}")
         if problems:
             RUNTIME["errors"] += len(problems)
             RUNTIME["last_error"] = " | ".join(problems)[:500]
@@ -247,10 +270,16 @@ def on_message(client, userdata, message):
             DUE.set()
         elif command == "auto" and value in ("ON", "OFF"):
             RUNTIME["auto"] = value == "ON"
+            STATE["controls"]["auto"] = RUNTIME["auto"]
+            save_state()
+            DUE.set()
             publish()
         elif command == "interval":
             try:
                 RUNTIME["interval"] = min(1440, max(1, int(float(value))))
+                STATE["controls"]["interval"] = RUNTIME["interval"]
+                save_state()
+                DUE.set()
                 publish()
             except ValueError:
                 LOG.warning("Invalid interval: %s", value)
