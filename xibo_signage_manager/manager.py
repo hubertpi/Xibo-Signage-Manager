@@ -14,6 +14,7 @@ from urllib.parse import urljoin
 
 import requests
 import paho.mqtt.client as mqtt
+from counter_widget import counter_targets, render_counter_markup
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("xibo-signage")
@@ -23,6 +24,7 @@ STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 STATE = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {"files": {}}
 STATE.setdefault("files", {})
 STATE.setdefault("controls", {})
+STATE.setdefault("counter", {})
 API = OPTIONS["xibo_url"].rstrip("/") + "/api/"
 PATH = pathlib.Path(OPTIONS["bulletin_folder"])
 ACCIDENT = pathlib.Path(OPTIONS["accident_file"])
@@ -239,6 +241,14 @@ def sync():
             except Exception as exc:
                 LOG.exception("Delete failed for %s", missing)
                 problems.append(f"Delete {missing}: {exc}")
+        try:
+            sync_accident_counter()
+        except (LookupError, ValueError, OSError, requests.HTTPError, RuntimeError) as exc:
+            LOG.warning("Accident counter date not yet synchronized: %s", exc)
+            problems.append(f"Counter: {exc}")
+        except Exception as exc:
+            LOG.exception("Accident counter synchronization failed")
+            problems.append(f"Counter: {exc}")
         if problems:
             RUNTIME["errors"] += len(problems)
             RUNTIME["last_error"] = " | ".join(problems)[:500]
@@ -257,6 +267,63 @@ def sync():
         RUNTIME["last_duration"] = round(time.monotonic() - start, 2)
         publish()
 
+
+
+def fetch_counter_targets():
+    layouts = api("GET", "layout", params={
+        "layout": OPTIONS["counter_layout_name"],
+        "showDrafts": 1,
+        "embed": "regions,playlists,widgets"
+    })
+    if not isinstance(layouts, list):
+        raise ValueError("Xibo layout search returned unexpected JSON")
+    return counter_targets(layouts, OPTIONS["counter_layout_name"])
+
+
+def sync_accident_counter():
+    """Push accident DATE only; browser JavaScript counts days at midnight."""
+    raw = ACCIDENT.read_text(encoding="utf-8").strip()
+    last_accident = dt.date.fromisoformat(raw)
+    if last_accident > dt.datetime.now().date():
+        raise ValueError("last_accident.txt contains a future date")
+    targets = fetch_counter_targets()
+    if not targets:
+        raise LookupError(
+            "Import the updated 'Main Digital Bulletin - Xibo 4K Replica' layout "
+            "with an 'XSM - Accident Counter' embedded widget before enabling date sync."
+        )
+    # Pick the newest matching top-level layout, never an unrelated widget.
+    layout, widget = max(
+        targets, key=lambda pair: (
+            int(pair[0].get("parentId") or pair[0].get("layoutId") or 0),
+            int(pair[0].get("layoutId") or 0)))
+    widget_id = int(widget["widgetId"])
+    root_id = int(layout.get("parentId") or layout["layoutId"])
+    desired = {"date": last_accident.isoformat(), "widget_id": widget_id,
+               "layout_id": root_id}
+    if STATE.get("counter") == desired:
+        return
+
+    # Published layouts need a draft checkout before editing in Xibo 4.5.
+    if (int(layout.get("publishedStatusId") or 0) == 1
+            and not layout.get("parentId")):
+        api("PUT", f"layout/checkout/{root_id}", data={})
+        targets = fetch_counter_targets()
+        drafts = [(entry, w) for entry, w in targets
+                  if int(entry.get("parentId") or 0) == root_id]
+        if not drafts:
+            raise RuntimeError("Xibo checked out the layout, but no editable counter widget was returned")
+        layout, widget = max(drafts, key=lambda pair: int(pair[0]["layoutId"]))
+        widget_id = int(widget["widgetId"])
+        desired["widget_id"] = widget_id
+
+    markup = render_counter_markup(last_accident)
+    api("PUT", f"playlist/widget/{widget_id}", data={"embedHtml": markup})
+    api("PUT", f"layout/publish/{root_id}", data={"publishNow": "1"})
+    STATE["counter"] = desired
+    save_state()
+    LOG.info("Updated Xibo embedded accident counter widget %s to %s (layout %s)",
+             widget_id, desired["date"], root_id)
 
 def accident_days():
     try:
