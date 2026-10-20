@@ -105,29 +105,72 @@ def is_stable(path):
 
 
 def media_id_from_upload(result, fallback=None):
-    """Xibo responses can be objects or collections, depending on API config."""
-    items = result if isinstance(result, list) else [result]
+    """Parse Xibo's POST /library response, including its nested files array."""
+    if isinstance(result, dict) and "files" in result:
+        items = result["files"]
+    elif isinstance(result, list):
+        items = result
+    else:
+        items = [result]
+    if not isinstance(items, list):
+        raise ValueError("Xibo returned a malformed media upload response")
     for item in items:
-        if isinstance(item, dict):
-            for key in ("mediaId", "media_id", "id"):
-                if item.get(key) is not None:
-                    return int(item[key])
-            if isinstance(item.get("media"), dict) and item["media"].get("mediaId"):
-                return int(item["media"]["mediaId"])
-    if fallback is not None:
+        if not isinstance(item, dict):
+            continue
+        if item.get("error"):
+            raise ValueError(f"Xibo rejected the upload: {item['error']}")
+        for key in ("mediaId", "media_id", "id"):
+            if item.get(key) is not None:
+                return int(item[key])
+        if isinstance(item.get("media"), dict) and item["media"].get("mediaId"):
+            return int(item["media"]["mediaId"])
+    if fallback is not None and items and all(
+            isinstance(item, dict) and not item.get("error") for item in items):
         return int(fallback)
     raise ValueError(f"Xibo upload did not return a media ID: {str(result)[:300]}")
 
 
-def upload(path, old_id=None):
-    data = {"name": path.name, "tags": TAG}
+def managed_title(filename):
+    """Namespace new imports so a pre-existing user's media name never blocks sync."""
+    return "XSM - " + filename
+
+
+def find_managed_media(items, filename):
+    """Recover previous uploads lost when v0.2.0 misparsed the upload response.
+
+    The library query is explicitly filtered by the add-on's management tag.
+    Untagged media are never adopted or deleted by this add-on.
+    """
+    matching = [item for item in items if isinstance(item, dict)
+                and item.get("name") in (filename, managed_title(filename))
+                and item.get("mediaId") is not None]
+    return max(matching, key=lambda item: int(item["mediaId"])) if matching else None
+
+
+def file_md5(path):
+    checksum = hashlib.md5()  # Match Xibo's non-security file checksum.
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            checksum.update(block)
+    return checksum.hexdigest()
+
+
+def managed_library():
+    result = api("GET", "library", params={"tags": TAG, "exactTags": 1})
+    if not isinstance(result, list):
+        raise ValueError(f"Xibo's managed media search returned an invalid response: {str(result)[:300]}")
+    return result
+
+
+def upload(path, old_id=None, title=None):
+    data = {"name": title or managed_title(path.name), "tags": TAG}
     if old_id is not None:
         data.update({"oldMediaId": str(old_id),
                      "updateInLayouts": "1", "deleteOldRevisions": "1"})
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    with path.open("rb") as src:
+    with path.open("rb") as stream:
         result = api("POST", "library", data=data,
-                     files={"files": (path.name, src, mime)})
+                     files={"files": (path.name, stream, mime)})
     return media_id_from_upload(result, old_id)
 
 
@@ -137,7 +180,7 @@ def sync():
     publish()
     problems = []
     try:
-        api("GET", "library", params={"mediaId": 0})
+        managed = managed_library()
         RUNTIME["connection"] = True
         files = scan()
         RUNTIME["bulletins"] = len(files)
@@ -150,14 +193,29 @@ def sync():
                     continue
                 digest = file_hash(path)
                 prior = STATE["files"].get(path.name)
+                if not prior:
+                    existing = find_managed_media(managed, path.name)
+                    if existing:
+                        media_id = int(existing["mediaId"])
+                        title = existing["name"]
+                        LOG.info("Recovered existing managed media %s (media %s)", path.name, media_id)
+                        prior = {"media_id": media_id, "name": title}
+                        # Previous successful uploads should be adopted without re-uploading.
+                        if str(existing.get("md5", "")).lower() == file_md5(path):
+                            prior["sha256"] = digest
+                        STATE["files"][path.name] = prior
+                        save_state()
                 if prior and prior.get("sha256") == digest:
                     continue
                 old_id = prior.get("media_id") if prior else None
-                new_id = upload(path, old_id)
-                STATE["files"][path.name] = {"sha256": digest, "media_id": new_id}
+                title = prior.get("name", path.name) if prior else managed_title(path.name)
+                new_id = upload(path, old_id, title)
+                STATE["files"][path.name] = {
+                    "sha256": digest, "media_id": new_id, "name": title}
                 save_state()
                 action = "Replaced" if old_id else "Imported"
-                LOG.info("%s %s: media %s -> %s", action, path.name, old_id, new_id)
+                LOG.info("%s %s (Xibo title %s): media %s -> %s",
+                         action, path.name, title, old_id, new_id)
             except Exception as exc:
                 LOG.exception("Import/update failed for %s", path.name)
                 problems.append(f"{path.name}: {exc}")
@@ -165,12 +223,19 @@ def sync():
             media_id = STATE["files"][missing].get("media_id")
             try:
                 if media_id is not None:
-                    # Only IDs previously uploaded and recorded by this add-on.
                     api("DELETE", f"library/{int(media_id)}",
                         data={"forceDelete": "1", "purge": "1"})
                 del STATE["files"][missing]
                 save_state()
                 LOG.info("Deleted removed bulletin %s (media %s)", missing, media_id)
+            except requests.HTTPError as exc:
+                if exc.response is not None and exc.response.status_code == 404:
+                    del STATE["files"][missing]
+                    save_state()
+                    LOG.info("Previously removed from Xibo: %s", missing)
+                else:
+                    LOG.exception("Delete failed for %s", missing)
+                    problems.append(f"Delete {missing}: {exc}")
             except Exception as exc:
                 LOG.exception("Delete failed for %s", missing)
                 problems.append(f"Delete {missing}: {exc}")

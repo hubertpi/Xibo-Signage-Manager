@@ -8,7 +8,7 @@ Add this repository to Home Assistant's add-on/app store:
 
 `https://github.com/hubertpi/Xibo-Signage-Manager`
 
-The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.2.0`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
+The app uses a **prebuilt amd64/arm64 image** at `ghcr.io/hubertpi/xibo-signage-manager:0.2.1`, built and pushed by GitHub Actions in [publish.yml](.github/workflows/publish.yml). It does not compile Docker images on the Home Assistant machine.
 
 **Check the GitHub Actions run has finished and that the GHCR package is public before installing.** Newly-created GitHub Container Registry packages may be private until their visibility is changed in the package settings.
 
@@ -20,12 +20,13 @@ Configure the app with your Xibo CMS URL and API client credentials, plus your M
 
 These are Supervisor-mounted Home Assistant paths corresponding to your Debian host's `/var/lib/homeassistant/share/digital_signage`. Do not put secrets in this repository or Samba.
 
-## Sync behavior (v0.2.0)
+## Sync behavior (v0.2.1)
 
-- **New file:** Upload as Xibo library media with configured tag.
+- **New file:** Upload as Xibo library media with configured tag and `XSM - ` name prefix to avoid clashes with manually uploaded files.
+- **Existing tagged file:** Detect an existing managed name and adopt its media ID after a previous interrupted upload; compare the Xibo MD5 with the local source to avoid an unnecessary upload. Untagged existing media is left untouched.
 - **Changed file:** Re-upload using Xibo's documented `oldMediaId`, `updateInLayouts=1`, `deleteOldRevisions=1` mechanism.
 - **Deleted file:** DELETE the Xibo media by its tracked ID using `forceDelete=1` and `purge=1`. This intentionally removes the media even if used in a layout, since the share is authoritative.
-- Only media IDs recorded in the add-on's persistent state are eligible for replacement or deletion. Unrelated Xibo library media is not touched.
+- Only media IDs recorded in the add-on's persistent state (including adopted tagged media) are eligible for replacement or deletion. Unrelated Xibo library media is not touched.
 - Ignore source files younger than ten seconds, then verify stable size and modification time to avoid importing partial Samba copies.
 - Supports JPG/JPEG/PNG/GIF/PDF. Actual PDF display depends on your Xibo player.
 - State persists in the add-on configuration directory. The sync interval and auto-sync MQTT controls also persist across restarts.
