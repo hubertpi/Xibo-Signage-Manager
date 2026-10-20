@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 
 import requests
 import paho.mqtt.client as mqtt
-from counter_widget import counter_targets, render_counter_markup
+from counter_widget import counter_targets, render_counter_markup, get_widget_option, WIDGET_NAME, COUNTER_STYLE, COUNTER_SCRIPT
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("xibo-signage")
@@ -318,7 +318,13 @@ def sync_accident_counter():
         desired["widget_id"] = widget_id
 
     markup = render_counter_markup(last_accident)
-    api("PUT", f"playlist/widget/{widget_id}", data={"embedHtml": markup})
+    update = {"embedHtml": markup}
+    if get_widget_option(widget, "name") != WIDGET_NAME:
+        # Migrate the placeholder widget from the previously imported 4K layout.
+        update.update({"name": WIDGET_NAME, "embedStyle": COUNTER_STYLE,
+                       "embedScript": COUNTER_SCRIPT})
+        LOG.info("Upgrading legacy placeholder widget %s in place", widget_id)
+    api("PUT", f"playlist/widget/{widget_id}", data=update)
     api("PUT", f"layout/publish/{root_id}", data={"publishNow": "1"})
     STATE["counter"] = desired
     save_state()

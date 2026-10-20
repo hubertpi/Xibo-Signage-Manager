@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "xibo_signage_manager"))
-from counter_widget import render_counter_markup, counter_targets
+from counter_widget import render_counter_markup, counter_targets, COUNTER_SCRIPT, COUNTER_STYLE
 from datetime import date
 
 class CounterWidgetTests(unittest.TestCase):
@@ -13,6 +13,17 @@ class CounterWidgetTests(unittest.TestCase):
         self.assertIn('data-last-accident="2026-10-01"', markup)
         self.assertIn("Days Since Last Accident", markup)
         self.assertNotIn("<img", markup)
+
+    def test_blue_counter_has_daily_live_update(self):
+        self.assertIn("Days Since Last Accident", render_counter_markup(date(2026, 10, 1)))
+        self.assertIn("setInterval(update,60000)", COUNTER_SCRIPT)
+        self.assertIn("#0867b3", COUNTER_STYLE)
+
+    def test_legacy_placeholder_is_detected(self):
+        layouts=[{"layout":"Main Digital Bulletin - 4K Replica","layoutId":13,
+          "regions":[{"regionPlaylist":{"widgets":[{"widgetId":103,
+          "type":"embedded","widgetOptions":[{"option":"name","value":"Days Since Last Incident"}]}]}}]}]
+        self.assertEqual(counter_targets(layouts,"Main Digital Bulletin - 4K Replica")[0][1]["widgetId"],103)
 
     def test_find_widget_only_within_named_layout(self):
         def layout(name, embedded_name):
