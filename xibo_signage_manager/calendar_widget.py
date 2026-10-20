@@ -25,7 +25,7 @@ CAL_STYLE="""*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;p
 CAL_SCRIPT=r'''<script>
 (function(){var started=false,index=0;
 function swap(){var panels=document.querySelectorAll('#xsm-calendar .xsm-panel');if(panels.length!==2)return;
-var old=panels[index],next=panels[1-index];next.classList.remove('xsm-departing');next.style.transition='none';next.style.transform='translateY(110%)';void next.offsetHeight;next.style.transition='';old.classList.add('xsm-departing');next.classList.add('xsm-arriving');
+var old=panels[index],next=panels[1-index];next.classList.remove('xsm-departing');next.style.transition='none';next.style.transform='translateY(110%)';void next.offsetHeight;next.style.transition='';old.classList.add('xsm-departing');next.classList.add('xsm-arriving');old.style.transform='translateY(-110%)';next.style.transform='translateY(0%)';
 window.setTimeout(function(){old.classList.remove('xsm-departing');old.style.transform='translateY(110%)';next.classList.remove('xsm-arriving');next.style.transform='translateY(0%)';},950);index=1-index;}
 function init(){if(started)return;started=true;window.setInterval(swap,10000);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();window.EmbedInit=init;

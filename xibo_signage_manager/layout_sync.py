@@ -119,11 +119,15 @@ def sync_live_layout(api,options,accident):
     if not p.get("playlistId"):raise LookupError("Slideshow region playlist ID unavailable")
     dynamic=(int(p.get("isDynamic") or 0)==1
              and (p.get("filterMediaTags") or "")==options["media_tag"])
+    opts={o.get("option"):o.get("value") for o in r.get("regionOptions") or []}
+    need_transition=(opts.get("transitionType")!="fly"
+         or opts.get("transitionDirection")!="W"
+         or str(opts.get("transitionDuration") or "")!="800")
     need_playlist=not dynamic or any(
         get_widget_option(w,"name")=="Bulletin Slideshow (replace sample with media)"
         for w in p.get("widgets") or []
     )
-    if not (need_counter or need_calendar or need_playlist):
+    if not (need_counter or need_calendar or need_playlist or need_transition):
         return False
 
     root=int(layout.get("parentId") or layout["layoutId"])
@@ -144,6 +148,10 @@ def sync_live_layout(api,options,accident):
         r,p=parts["slideshow"]
         dynamic=(int(p.get("isDynamic") or 0)==1
                  and (p.get("filterMediaTags") or "")==options["media_tag"])
+        opts={o.get("option"):o.get("value") for o in r.get("regionOptions") or []}
+        need_transition=(opts.get("transitionType")!="fly"
+            or opts.get("transitionDirection")!="W"
+            or str(opts.get("transitionDuration") or "")!="800")
         need_playlist=not dynamic or any(
             get_widget_option(w,"name")=="Bulletin Slideshow (replace sample with media)"
             for w in p.get("widgets") or []
@@ -169,6 +177,20 @@ def sync_live_layout(api,options,accident):
         })
         LOG.info("Connected slideshow region playlist %s to managed tag %s",
                  p["playlistId"],options["media_tag"])
+
+    if need_transition:
+        api("PUT",f"region/{int(r['regionId'])}",data={
+            "name":r.get("name") or "XSM - Bulletin Slideshow",
+            "type":r.get("type") or "frame",
+            "left":str(r.get("left") or 50),
+            "top":str(r.get("top") or 28),
+            "width":str(r.get("width") or 2608),
+            "height":str(r.get("height") or 2104),
+            "zIndex":str(r.get("zIndex") or 1),
+            "loop":"1","transitionType":"fly",
+            "transitionDirection":"W","transitionDuration":"800"
+        })
+        LOG.info("Configured westward fly transition for slideshow region %s",r["regionId"])
 
     if need_counter:_update_widget(api,counter,cp,"accident counter")
     if need_calendar:_update_widget(api,calendar,calp,"Events/Birthdays")
