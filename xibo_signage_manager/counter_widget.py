@@ -3,7 +3,7 @@ import datetime as dt
 import html
 WIDGET_NAME = "XSM - Accident Counter"
 LEGACY_WIDGET_NAME = "Days Since Last Incident"
-COUNTER_STYLE = """*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent!important}#xsm-accident-counter{width:100%;height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:transparent}"""
+COUNTER_STYLE = """*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent!important}#xsm-accident-counter{width:100%;height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:transparent;color:#0867b3}"""
 COUNTER_SCRIPT = r'''<script>
 (function(){var started=false;
 function day(s){var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');if(!m)return NaN;var u=Date.UTC(+m[1],+m[2]-1,+m[3]),d=new Date(u);return(d.getUTCFullYear()===+m[1]&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[3])?u/86400000:NaN;}
