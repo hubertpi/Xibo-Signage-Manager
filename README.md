@@ -41,3 +41,7 @@ For private Google calendars, obtain the **Secret address in iCal format** under
 ## Build
 
 GitHub Actions runs Python tests and publishes images on source changes. The add-on uses a Python Alpine base and requires no compilation on Home Assistant.
+
+## Slideshow display
+
+The add-on now uses a single Embedded slideshow widget with an internally clipped, rounded (34 px) westward transition rather than Xibo’s native unbounded region fly effect. PDF pages are rasterized preserving aspect ratio, and the native clocks are vertically centered with a 22 px region gap. The Xibo Player must refresh the published layout before these changes appear.

@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"xibo_signage_manager"))
-from slideshow import DOC_FILE, needs_playlist_sync, parse_name, rename_bulletins
+from slideshow import DOC_FILE, needs_playlist_sync, parse_name, rename_bulletins, slideshow_payload, SLIDESHOW_STYLE
 
 class SlideFileTests(unittest.TestCase):
     def make_files(self,filenames):
@@ -70,15 +70,26 @@ class SlideFileTests(unittest.TestCase):
         self.assertEqual(parse_name("0002 - 15s - Update.pdf"),(2,True,15,"Update.pdf"))
         self.assertEqual(parse_name("Update.png"),(None,False,10,"Update.png"))
 
-    def test_transition_is_required_for_existing_widgets(self):
-        playlist={"isDynamic":0,"widgets":[{"widgetId":7,"mediaIds":[71],
-                  "duration":10,"useDuration":1,"displayOrder":1,"widgetOptions":[]}]}
+    def test_embedded_slideshow_clips_to_rounded_region(self):
+        slides=[{"media_id":71,"duration":10},{"media_id":72,"duration":15}]
+        payload=slideshow_payload(slides)
+        self.assertIn('border-radius:34px', SLIDESHOW_STYLE)
+        self.assertIn('overflow:hidden', SLIDESHOW_STYLE)
+        self.assertIn('object-fit:contain', SLIDESHOW_STYLE)
+        self.assertIn('data-url="[71]" data-ms="10000"',payload["embedHtml"])
+        self.assertIn('data-url="[72]" data-ms="15000"',payload["embedHtml"])
+        self.assertIn('translateX(-100%)',payload["embedScript"])
+        self.assertEqual(payload["duration"],"3600")
+
+    def test_embedded_slideshow_sync_is_idempotent(self):
         slides=[{"media_id":71,"duration":10}]
-        self.assertTrue(needs_playlist_sync(playlist,slides))
-        playlist["widgets"][0]["widgetOptions"]=[{"option":k,"value":v} for k,v in {
-            "transIn":"fly","transOut":"fly","transInDirection":"W",
-            "transOutDirection":"W","transInDuration":"800",
-            "transOutDuration":"800"}.items()]
-        self.assertFalse(needs_playlist_sync(playlist,slides))
+        payload=slideshow_payload(slides)
+        widget={"widgetId":3,"type":"embedded","duration":3600,
+                "useDuration":1,"widgetOptions":[{"option":k,"value":v}
+                for k,v in payload.items()]}
+        self.assertFalse(needs_playlist_sync({"isDynamic":0,"widgets":[widget]},slides))
+        changed=[{"media_id":71,"duration":15}]
+        self.assertTrue(needs_playlist_sync({"isDynamic":0,"widgets":[widget]},changed))
+
 
 if __name__=="__main__":unittest.main()

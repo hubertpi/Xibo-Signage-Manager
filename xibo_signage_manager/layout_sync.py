@@ -17,8 +17,8 @@ LOG=logging.getLogger("xibo-signage")
 # Geometry within the existing 1120x320 clock/date background panel (Y=30..350).
 # Keep native clock-digital widgets; reposition their regions instead of replacing them.
 CLOCK_GEOMETRY = {
-    "Live Time": {"left": 2680, "top": 35, "width": 1120, "height": 150},
-    "Live Date": {"left": 2680, "top": 237, "width": 1120, "height": 108},
+    "Live Time": {"left": 2680, "top": 48, "width": 1120, "height": 150},
+    "Live Date": {"left": 2680, "top": 220, "width": 1120, "height": 112},
 }
 
 def _playlist(region):
@@ -159,9 +159,9 @@ def sync_live_layout(api,options,accident,slides):
     dynamic=(int(p.get("isDynamic") or 0)==1
              and (p.get("filterMediaTags") or "")==options["media_tag"])
     opts={o.get("option"):o.get("value") for o in r.get("regionOptions") or []}
-    need_transition=(opts.get("transitionType")!="fly"
-         or opts.get("transitionDirection")!="W"
-         or str(opts.get("transitionDuration") or "")!="800")
+    need_transition=(bool(opts.get("transitionType"))
+         or bool(opts.get("transitionDirection"))
+         or str(opts.get("transitionDuration") or "0") not in ("0",""))
     need_playlist=needs_playlist_sync(p,slides)
     if not (need_counter or need_calendar or need_playlist or need_transition or clock_updates):
         return False
@@ -186,9 +186,9 @@ def sync_live_layout(api,options,accident,slides):
         dynamic=(int(p.get("isDynamic") or 0)==1
                  and (p.get("filterMediaTags") or "")==options["media_tag"])
         opts={o.get("option"):o.get("value") for o in r.get("regionOptions") or []}
-        need_transition=(opts.get("transitionType")!="fly"
-            or opts.get("transitionDirection")!="W"
-            or str(opts.get("transitionDuration") or "")!="800")
+        need_transition=(bool(opts.get("transitionType"))
+            or bool(opts.get("transitionDirection"))
+            or str(opts.get("transitionDuration") or "0") not in ("0",""))
         need_playlist=needs_playlist_sync(p,slides)
 
     if need_playlist:
@@ -212,10 +212,10 @@ def sync_live_layout(api,options,accident,slides):
             "width":str(r.get("width") or 2608),
             "height":str(r.get("height") or 2104),
             "zIndex":str(r.get("zIndex") or 1),
-            "loop":"1","transitionType":"fly",
-            "transitionDirection":"W","transitionDuration":"800"
+            "loop":"1","transitionType":"",
+            "transitionDirection":"","transitionDuration":"0"
         })
-        LOG.info("Configured westward fly transition for slideshow region %s",r["regionId"])
+        LOG.info("Disabled unbounded native slideshow transition on region %s",r["regionId"])
 
     if clock_updates:
         _update_clock_regions(api, clock_updates)
