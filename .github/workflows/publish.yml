@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - "xibo_signage_manager/**"
+      - "tests/**"
       - ".github/workflows/publish.yml"
   workflow_dispatch:
 
