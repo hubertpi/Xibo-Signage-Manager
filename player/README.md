@@ -58,6 +58,15 @@ reboot the Pi, treat a CMS outage as a failure, or prove that every widget's
 content is advancing. Hardware, HDMI failures and a hung OS need separate
 monitoring; this is a process/browser watchdog.
 
+Before startup and after shutdown, the service closes any remaining Chromium
+processes owned by the desktop user that use the exact dedicated Xibo profile.
+This covers a browser surviving its launcher outside the service cgroup: without
+cleanup, the next Chromium invocation reuses that old browser, exits immediately,
+and the launcher shuts down the local server. Cleanup allows five seconds for
+termination before forcing remaining matching processes to exit. Linux pidfds
+prevent PID-reuse races; other browser profiles and users are excluded. It never
+deletes profile data, registration or lock files.
+
 ```bash
 xsm-player stop       # intentional, persists across watchdog checks and reboots
 xsm-player start      # clears pause and resumes
