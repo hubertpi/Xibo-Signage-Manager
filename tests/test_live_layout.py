@@ -67,20 +67,20 @@ class LiveLayoutTests(unittest.TestCase):
     def test_ics_rolling_30_days_includes_today_and_day_29(self):
         def event(uid, start, summary):
             return (
-                "BEGIN:VEVENT\\n"
-                f"UID:{uid}\\n"
-                "DTSTAMP:20261001T120000Z\\n"
-                f"DTSTART;VALUE=DATE:{start}\\n"
-                f"SUMMARY:{summary}\\n"
-                "END:VEVENT\\n"
+                "BEGIN:VEVENT\n"
+                f"UID:{uid}\n"
+                "DTSTAMP:20261001T120000Z\n"
+                f"DTSTART;VALUE=DATE:{start}\n"
+                f"SUMMARY:{summary}\n"
+                "END:VEVENT\n"
             )
         ics = (
-            "BEGIN:VCALENDAR\\nVERSION:2.0\\nPRODID:-//XSM Test//EN\\n"
+            "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//XSM Test//EN\n"
             + event("a@test", "20261020", "Yesterday")
             + event("b@test", "20261021", "Today")
             + event("c@test", "20261119", "Day 29")
             + event("d@test", "20261120", "Day 30")
-            + "END:VCALENDAR\\n"
+            + "END:VCALENDAR\n"
         ).encode("utf-8")
         response = Mock()
         response.content = ics
