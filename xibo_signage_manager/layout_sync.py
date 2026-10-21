@@ -12,12 +12,49 @@ from calendar_widget import (
 )
 
 LOG=logging.getLogger("xibo-signage")
+
+# Geometry within the existing 1120x320 clock/date background panel (Y=30..350).
+# Keep native clock-digital widgets; reposition their regions instead of replacing them.
+CLOCK_GEOMETRY = {
+    "Live Time": {"left": 2680, "top": 35, "width": 1120, "height": 150},
+    "Live Date": {"left": 2680, "top": 237, "width": 1120, "height": 108},
+}
+
 def _playlist(region):
     p=region.get("regionPlaylist") or region.get("playlist")
     if isinstance(p,dict):return p
     for entry in region.get("playlists") or []:
         if isinstance(entry,dict) and entry.get("regionId"):return entry
     return None
+
+def _clock_region_updates(layout):
+    updates = []
+    for region in layout.get("regions") or []:
+        target = CLOCK_GEOMETRY.get(region.get("name"))
+        if target is None:
+            continue
+        playlist = _playlist(region)
+        # Don't reposition unrelated regions that merely share a name.
+        if not playlist or not any(w.get("type") == "clock-digital"
+                                   for w in playlist.get("widgets") or []):
+            continue
+        if any(int(region.get(key) or -1) != value for key, value in target.items()):
+            updates.append((region, target))
+    return updates
+
+def _update_clock_regions(api, updates):
+    for region, target in updates:
+        api("PUT", f"region/{int(region['regionId'])}", data={
+            "name": region["name"],
+            "type": region.get("type") or "frame",
+            "left": str(target["left"]),
+            "top": str(target["top"]),
+            "width": str(target["width"]),
+            "height": str(target["height"]),
+            "zIndex": str(region.get("zIndex") or 3),
+            "loop": "1",
+        })
+        LOG.info("Recentered %s clock region %s", region["name"], region["regionId"])
 
 def _role(region,widget=None):
     name=(region.get("name") or "").lower()
@@ -115,6 +152,7 @@ def sync_live_layout(api,options,accident):
     calp=build_calendar_payload(events,birthdays,calendar,get_widget_option)
     need_counter=widget_needs_update(counter,cp)
     need_calendar=widget_needs_update(calendar,calp)
+    clock_updates=_clock_region_updates(layout)
     r,p=parts["slideshow"]
     if not p.get("playlistId"):raise LookupError("Slideshow region playlist ID unavailable")
     dynamic=(int(p.get("isDynamic") or 0)==1
@@ -127,7 +165,7 @@ def sync_live_layout(api,options,accident):
         get_widget_option(w,"name")=="Bulletin Slideshow (replace sample with media)"
         for w in p.get("widgets") or []
     )
-    if not (need_counter or need_calendar or need_playlist or need_transition):
+    if not (need_counter or need_calendar or need_playlist or need_transition or clock_updates):
         return False
 
     root=int(layout.get("parentId") or layout["layoutId"])
@@ -145,6 +183,7 @@ def sync_live_layout(api,options,accident):
         calp=build_calendar_payload(events,birthdays,calendar,get_widget_option)
         need_counter=widget_needs_update(counter,cp)
         need_calendar=widget_needs_update(calendar,calp)
+        clock_updates=_clock_region_updates(layout)
         r,p=parts["slideshow"]
         dynamic=(int(p.get("isDynamic") or 0)==1
                  and (p.get("filterMediaTags") or "")==options["media_tag"])
@@ -191,6 +230,9 @@ def sync_live_layout(api,options,accident):
             "transitionDirection":"W","transitionDuration":"800"
         })
         LOG.info("Configured westward fly transition for slideshow region %s",r["regionId"])
+
+    if clock_updates:
+        _update_clock_regions(api, clock_updates)
 
     if need_counter:_update_widget(api,counter,cp,"accident counter")
     if need_calendar:_update_widget(api,calendar,calp,"Events/Birthdays")
