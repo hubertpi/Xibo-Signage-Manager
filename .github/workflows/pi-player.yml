@@ -1,0 +1,25 @@
+name: Validate Raspberry Pi player deployment
+on:
+  push:
+    branches: [main]
+    paths: ['player/**', '.github/workflows/pi-player.yml']
+  pull_request:
+    branches: [main]
+    paths: ['player/**', '.github/workflows/pi-player.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check shell and Python syntax
+        run: |
+          for script in player/*.sh; do bash -n "$script"; done
+          python3 -m py_compile player/*.py
+      - name: Test setup guard, configuration and watchdog recovery
+        run: python3 -m unittest discover -s player/tests -v
