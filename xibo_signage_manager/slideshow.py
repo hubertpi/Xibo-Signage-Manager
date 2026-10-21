@@ -319,7 +319,7 @@ def slideshow_payload(slides):
     library asset for Player download, including generated PDF page images.
     """
     sources = "".join(
-        f'<span class="xsm-source" data-url="[{int(slide["media_id"])}]" '
+        f'<span class="xsm-source" data-url="[[mediaId={int(slide["media_id"])}]]" '
         f'data-ms="{int(slide["duration"])*1000}"></span>'
         for slide in slides
     )

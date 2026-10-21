@@ -8,6 +8,9 @@ import json
 import logging
 import mimetypes
 import pathlib
+import os
+import re
+import signal
 import threading
 import time
 from urllib.parse import urljoin
@@ -20,6 +23,18 @@ from slideshow import rename_bulletins, sync_media, cleanup_assets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("xibo-signage")
+
+def addon_version(path=None):
+    """Read the add-on version included in the running container."""
+    config = pathlib.Path(path) if path else pathlib.Path(__file__).with_name("config.yaml")
+    try:
+        content = config.read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+    match = re.search(r'(?m)^version:\s*["\']?([0-9a-zA-Z.+-]+)', content)
+    return match.group(1) if match else "unknown"
+
+VERSION = addon_version()
 OPTIONS = json.loads(pathlib.Path("/data/options.json").read_text())
 STATE_FILE = pathlib.Path("/config/xibo_signage_manager_state.json")
 STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -40,6 +55,7 @@ RUNTIME = {"connection": False, "status": "starting", "last_sync": None,
            "auto": STATE["controls"].get("auto", True),
            "interval": int(STATE["controls"].get("interval", OPTIONS["sync_interval_minutes"]))}
 DUE = threading.Event()
+SHUTDOWN = threading.Event()
 TOKEN = None
 TOKEN_EXPIRY = 0
 CLIENT = None
@@ -78,6 +94,20 @@ def api(method, route, **kwargs):
         headers["Authorization"] = "Bearer " + token()
         response = requests.request(method, urljoin(API, route.lstrip("/")),
                                     headers=headers, timeout=120, **kwargs)
+    if response.status_code == 403 and route.lstrip("/").startswith("playlist/widget/"):
+        action = method.upper()
+        route_parts = route.lstrip("/").split("/")
+        widget_id = route_parts[2] if len(route_parts) >= 3 else "unknown"
+        if action == "DELETE":
+            raise PermissionError(
+                f"Xibo denied DELETE on widget {widget_id} (HTTP 403). "
+                "Grant the Xibo API user delete permission on this widget, "
+                "or use an API user who owns it or has administrator privileges."
+            )
+        raise PermissionError(
+            f"Xibo denied {action} on widget {widget_id} (HTTP 403). "
+            "Check the Xibo API user's widget and layout edit permissions."
+        )
     response.raise_for_status()
     return response.json() if response.content else {}
 
@@ -182,6 +212,7 @@ def sync():
     start = time.monotonic()
     RUNTIME["status"] = "syncing"
     publish()
+    LOG.info("Synchronization started: %s", PATH)
     problems = []
     try:
         records = rename_bulletins(PATH)
@@ -192,9 +223,11 @@ def sync():
             RUNTIME["status"] = "waiting for file copy"
             return
         RUNTIME["bulletins"] = len(records)
+        LOG.info("Found %d bulletin files", len(records))
         slides, used = sync_media(
             api, records, STATE, save_state,
             pathlib.Path("/config/xsm_pdf_pages"), TAG)
+        LOG.info("Xibo media library accessible; prepared %d slideshow images/pages", len(slides))
         try:
             sync_live_layout(api, OPTIONS, ACCIDENT, slides)
             cleanup_assets(api, STATE, used, save_state)
@@ -208,10 +241,12 @@ def sync():
             RUNTIME["errors"] += len(problems)
             RUNTIME["last_error"] = " | ".join(problems)[:500]
             RUNTIME["status"] = "warning"
+            LOG.warning("Synchronization incomplete: %s", RUNTIME["last_error"])
         else:
             RUNTIME["last_error"] = ""
             RUNTIME["status"] = "idle"
             RUNTIME["last_sync"] = dt.datetime.now(dt.timezone.utc).isoformat()
+            LOG.info("Synchronization successful: %d files, %d images/pages; running normally", len(records), len(slides))
     except Exception as exc:
         LOG.exception("Synchronization failed")
         RUNTIME["connection"] = False
@@ -365,6 +400,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.subscribe(f"{PREFIX}/set/#")
     setup_discovery()
     publish()
+    LOG.info("MQTT connected and Home Assistant discovery published")
 
 
 def on_message(client, userdata, message):
@@ -390,8 +426,23 @@ def on_message(client, userdata, message):
                 LOG.warning("Invalid interval: %s", value)
 
 
+def request_shutdown(signum, _frame):
+    """Respond to Home Assistant stop/restart; finish the current operation."""
+    LOG.info("Shutdown requested (%s); finishing current operation", signal.Signals(signum).name)
+    SHUTDOWN.set()
+    DUE.set()
+
+
 def main():
     global CLIENT
+    LOG.info("Starting Xibo Signage Manager v%s (PID %d)", VERSION, os.getpid())
+    LOG.info("Configuration: CMS=%s; bulletin folder=%s; layout=%s; tag=%s",
+             OPTIONS["xibo_url"], PATH, OPTIONS["counter_layout_name"], TAG)
+    LOG.info("Auto sync %s (%d-minute interval)",
+             "enabled" if RUNTIME["auto"] else "disabled", RUNTIME["interval"])
+    LOG.info("Bulletin folder: %s", "available" if PATH.is_dir() else "MISSING")
+    signal.signal(signal.SIGTERM, request_shutdown)
+    signal.signal(signal.SIGINT, request_shutdown)
     CLIENT = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=PREFIX)
     CLIENT.will_set(f"{PREFIX}/availability", "offline", qos=1, retain=True)
     username = OPTIONS.get("mqtt_username")
@@ -399,21 +450,36 @@ def main():
         CLIENT.username_pw_set(username, OPTIONS.get("mqtt_password", ""))
     CLIENT.on_connect = on_connect
     CLIENT.on_message = on_message
-    CLIENT.connect_async(OPTIONS["mqtt_host"], int(OPTIONS["mqtt_port"]))
-    CLIENT.loop_start()
-    LOG.info("Watching %s, managing tag %s", PATH, TAG)
-    DUE.set()
-    next_poll = 0.0
-    while True:
-        wait = max(0, next_poll - time.monotonic()) if RUNTIME["auto"] else 2.0
-        fired = DUE.wait(timeout=wait)
-        DUE.clear()
-        if fired or (RUNTIME["auto"] and time.monotonic() >= next_poll):
-            with LOCK:
-                sync()
-                next_poll = time.monotonic() + RUNTIME["interval"] * 60
-        else:
-            publish()
+    try:
+        LOG.info("Connecting to MQTT broker %s:%s", OPTIONS["mqtt_host"], OPTIONS["mqtt_port"])
+        CLIENT.connect_async(OPTIONS["mqtt_host"], int(OPTIONS["mqtt_port"]))
+        CLIENT.loop_start()
+        LOG.info("Startup initialized; initial Xibo synchronization pending")
+        DUE.set()
+        next_poll = 0.0
+        while not SHUTDOWN.is_set():
+            wait = max(0, next_poll - time.monotonic()) if RUNTIME["auto"] else 2.0
+            fired = DUE.wait(timeout=wait)
+            DUE.clear()
+            if SHUTDOWN.is_set():
+                break
+            if fired or (RUNTIME["auto"] and time.monotonic() >= next_poll):
+                with LOCK:
+                    sync()
+                    next_poll = time.monotonic() + RUNTIME["interval"] * 60
+            else:
+                publish()
+    finally:
+        LOG.info("Stopping Xibo Signage Manager v%s", VERSION)
+        if CLIENT is not None:
+            try:
+                CLIENT.publish(f"{PREFIX}/availability", "offline", qos=1, retain=True)
+                CLIENT.disconnect()
+                CLIENT.loop_stop()
+                LOG.info("MQTT disconnected")
+            except Exception as exc:
+                LOG.warning("MQTT shutdown warning: %s", exc)
+        LOG.info("Shutdown complete")
 
 
 if __name__ == "__main__":

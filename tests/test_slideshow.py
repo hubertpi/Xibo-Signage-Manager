@@ -109,8 +109,8 @@ class SlideFileTests(unittest.TestCase):
         self.assertIn('border-radius:34px', SLIDESHOW_STYLE)
         self.assertIn('overflow:hidden', SLIDESHOW_STYLE)
         self.assertIn('object-fit:contain', SLIDESHOW_STYLE)
-        self.assertIn('data-url="[71]" data-ms="10000"',payload["embedHtml"])
-        self.assertIn('data-url="[72]" data-ms="15000"',payload["embedHtml"])
+        self.assertIn('data-url="[[mediaId=71]]" data-ms="10000"',payload["embedHtml"])
+        self.assertIn('data-url="[[mediaId=72]]" data-ms="15000"',payload["embedHtml"])
         self.assertIn('translateX(-100%)',payload["embedScript"])
         self.assertEqual(payload["duration"],"3600")
 
