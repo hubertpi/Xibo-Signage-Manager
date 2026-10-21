@@ -131,7 +131,7 @@ def pdf_pages(path,digest,cache_dir):
     """Render PDF pages at aspect-preserving dimensions within 2608x2104."""
     cache = pathlib.Path(cache_dir)/("aspect-v2-"+digest)
     cache.mkdir(parents=True,exist_ok=True)
-    info = subprocess.run(["pdfinfo",str(path)],capture_output=True,
+    info = subprocess.run(["pdfinfo","-f","1","-l","100",str(path)],capture_output=True,
                           text=True,timeout=30,check=True)
     m = re.search(r"^Pages:\s*(\d+)\s*$",info.stdout,re.M)
     if not m:
