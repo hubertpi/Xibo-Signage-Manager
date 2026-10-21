@@ -226,6 +226,12 @@ def sync_media(api,records,state,save_state,cache_root,media_tag):
             save_state()
             slides.append({"media_id":media_id,"duration":secs,
                            "title":title,"key":key})
+    # All migrated media are recorded by stable descriptive filenames.
+    # Retire old filename-based state to avoid adopting a deleted Xibo ID later.
+    # Do NOT purge old Xibo media here; another layout may still reference it.
+    if state.get("files"):
+        state["files"] = {}
+        save_state()
     return slides,used
 
 def cleanup_assets(api,state,used,save_state):
