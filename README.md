@@ -45,3 +45,7 @@ GitHub Actions runs Python tests and publishes images on source changes. The add
 ## Slideshow display
 
 The add-on now uses a single Embedded slideshow widget with an internally clipped, rounded (34 px) westward transition rather than Xibo’s native unbounded region fly effect. PDF pages are rasterized preserving aspect ratio, and the native clocks are vertically centered with a 22 px region gap. The Xibo Player must refresh the published layout before these changes appear.
+
+## Version 0.5.3 changes
+
+Adds a custom Home Assistant icon; logs version, startup, broker connection, sync completion, and graceful SIGTERM shutdown. For Xibo API HTTP 403 failures, the logs now identify the denied widget operation and explain required Xibo-side permissions. Embedded slideshow image URLs use Xibo library media placeholders (`[[mediaId=...]]`) instead of invalid bracket identifiers. Xibo widget permissions cannot be overridden from the add-on.
