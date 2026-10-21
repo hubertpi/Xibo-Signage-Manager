@@ -8,6 +8,7 @@ No profile files or Chromium singleton locks are removed.
 import os
 from pathlib import Path
 import select
+import shlex
 import signal
 import time
 
@@ -19,7 +20,13 @@ def matches_process(proc, profile, uid):
         executable = Path(os.readlink(proc / 'exe')).name.removesuffix(' (deleted)')
         if executable not in ('chromium', 'chromium-browser'):
             return False
-        args = (proc / 'cmdline').read_bytes().decode(errors='replace').split('\0')
+        args = [arg for arg in (proc / 'cmdline').read_bytes().decode(
+            errors='replace').split('\0') if arg]
+        # Chromium can rewrite its process title so /proc exposes argv as one
+        # space-separated string. Match that representation as well as normal
+        # NUL-separated argv; never execute the parsed text.
+        if len(args) == 1:
+            args = shlex.split(args[0])
         values = []
         for index, arg in enumerate(args):
             if arg.startswith('--user-data-dir='):

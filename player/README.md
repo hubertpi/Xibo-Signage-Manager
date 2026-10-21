@@ -66,6 +66,8 @@ and the launcher shuts down the local server. Cleanup allows five seconds for
 termination before forcing remaining matching processes to exit. Linux pidfds
 prevent PID-reuse races; other browser profiles and users are excluded. It never
 deletes profile data, registration or lock files.
+Both normal argument lists and Chromium's single-string rewritten process title
+are supported when identifying the profile.
 
 ```bash
 xsm-player stop       # intentional, persists across watchdog checks and reboots
