@@ -10,6 +10,7 @@ from calendar_widget import (
     WIDGET_NAME as CALENDAR_NAME, LEGACY_WIDGET_NAME as LEGACY_CALENDAR,
     events_from_ics, build_calendar_payload
 )
+from slideshow import needs_playlist_sync, apply_playlist
 
 LOG=logging.getLogger("xibo-signage")
 
@@ -118,7 +119,7 @@ def _update_widget(api,widget,payload,description):
     api("PUT",f"playlist/widget/{int(widget['widgetId'])}",data=payload)
     LOG.info("Updated %s HTML widget %s",description,widget["widgetId"])
 
-def sync_live_layout(api,options,accident):
+def sync_live_layout(api,options,accident,slides):
     name=options["counter_layout_name"]
     layouts=_get_layouts(api,name)
     if not layouts:raise LookupError(f"Cannot find Xibo layout named {name!r}")
@@ -161,10 +162,7 @@ def sync_live_layout(api,options,accident):
     need_transition=(opts.get("transitionType")!="fly"
          or opts.get("transitionDirection")!="W"
          or str(opts.get("transitionDuration") or "")!="800")
-    need_playlist=not dynamic or any(
-        get_widget_option(w,"name")=="Bulletin Slideshow (replace sample with media)"
-        for w in p.get("widgets") or []
-    )
+    need_playlist=needs_playlist_sync(p,slides)
     if not (need_counter or need_calendar or need_playlist or need_transition or clock_updates):
         return False
 
@@ -191,31 +189,19 @@ def sync_live_layout(api,options,accident):
         need_transition=(opts.get("transitionType")!="fly"
             or opts.get("transitionDirection")!="W"
             or str(opts.get("transitionDuration") or "")!="800")
-        need_playlist=not dynamic or any(
-            get_widget_option(w,"name")=="Bulletin Slideshow (replace sample with media)"
-            for w in p.get("widgets") or []
-        )
+        need_playlist=needs_playlist_sync(p,slides)
 
     if need_playlist:
-        widgets=p.get("widgets") or []
-        for w in widgets:
-            if w.get("type")=="embedded" and (
-                get_widget_option(w,"name")=="Bulletin Slideshow (replace sample with media)"
-                or "Sample slide" in (get_widget_option(w,"embedHtml") or "")
-            ):
-                api("DELETE",f"playlist/widget/{int(w['widgetId'])}")
-                LOG.info("Removed sample bulletin widget %s",w["widgetId"])
-            elif not dynamic:
-                raise RuntimeError("Refusing to replace an unexpected slideshow widget")
-        api("PUT",f"playlist/{int(p['playlistId'])}",data={
-            "name":"XSM - Bulletin Slideshow","isDynamic":"1",
-            "filterMediaTag":options["media_tag"],"exactTags":"1",
-            "logicalOperator":"OR","maxNumberOfItems":"100",
-            "folderId":str(p.get("folderId") or 1),
-            "enableStat":"Inherit"
-        })
-        LOG.info("Connected slideshow region playlist %s to managed tag %s",
-                 p["playlistId"],options["media_tag"])
+        def reload_slideshow():
+            # Assignment APIs return only partial playlist data, so refresh the
+            # draft's embedded widgets before configuring order/transitions.
+            current = [x for x in _get_layouts(api,name)
+                       if int(x.get("parentId") or 0)==root]
+            if not current:
+                raise RuntimeError("Cannot reload editable Xibo layout")
+            latest = find_parts(_preferred(current))
+            return latest["slideshow"][1]
+        apply_playlist(api,p,slides,reload_slideshow)
 
     if need_transition:
         api("PUT",f"region/{int(r['regionId'])}",data={
