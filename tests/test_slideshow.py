@@ -5,9 +5,10 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"xibo_signage_manager"))
-from slideshow import DOC_FILE, needs_playlist_sync, parse_name, rename_bulletins, slideshow_payload, SLIDESHOW_STYLE
+from slideshow import DOC_FILE, needs_playlist_sync, parse_name, rename_bulletins, pdf_pages, slideshow_payload, SLIDESHOW_STYLE
 
 class SlideFileTests(unittest.TestCase):
     def make_files(self,filenames):
@@ -69,6 +70,38 @@ class SlideFileTests(unittest.TestCase):
     def test_parse_4_digit_and_default(self):
         self.assertEqual(parse_name("0002 - 15s - Update.pdf"),(2,True,15,"Update.pdf"))
         self.assertEqual(parse_name("Update.png"),(None,False,10,"Update.png"))
+
+    def test_pdf_page_sizes_requested_and_aspect_preserved(self):
+        """pdfinfo needs -f/-l to report 'Page N size' instead of 'Page size'."""
+        with tempfile.TemporaryDirectory() as td:
+            root=pathlib.Path(td)
+            document=root/"Newsletter.pdf"
+            document.write_bytes(b"%PDF-1.4 test stub")
+            renders=[]
+            def run(args, **kwargs):
+                if args[0]=="pdfinfo":
+                    self.assertEqual(args[1:5],["-f","1","-l","100"])
+                    return SimpleNamespace(stdout=(
+                        "Pages:           2\n"
+                        "Page    1 size:  612 x 792 pts (letter)\n"
+                        "Page    1 rot:   0\n"
+                        "Page    2 size:  792 x 612 pts (letter)\n"
+                        "Page    2 rot:   0\n"))
+                if args[0]=="pdftoppm":
+                    renders.append(args)
+                    pathlib.Path(args[-1]+".jpg").write_bytes(b"test-rendered-page")
+                    return SimpleNamespace()
+                self.fail("Unexpected subprocess: "+str(args))
+            with patch("slideshow.subprocess.run",side_effect=run):
+                output=pdf_pages(document,"sha256",root/"cache")
+            self.assertEqual(len(output),2)
+            self.assertTrue(all(p.is_file() for p in output))
+            self.assertEqual(
+                [r[r.index("-scale-to-x")+1] for r in renders],
+                ["1626","2608"])
+            self.assertEqual(
+                [r[r.index("-scale-to-y")+1] for r in renders],
+                ["2104","2015"])
 
     def test_embedded_slideshow_clips_to_rounded_region(self):
         slides=[{"media_id":71,"duration":10},{"media_id":72,"duration":15}]
