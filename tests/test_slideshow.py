@@ -82,11 +82,11 @@ class SlideFileTests(unittest.TestCase):
                 if args[0]=="pdfinfo":
                     self.assertEqual(args[1:5],["-f","1","-l","100"])
                     return SimpleNamespace(stdout=(
-                        "Pages:           2\\n"
-                        "Page    1 size:  612 x 792 pts (letter)\\n"
-                        "Page    1 rot:   0\\n"
-                        "Page    2 size:  792 x 612 pts (letter)\\n"
-                        "Page    2 rot:   0\\n"))
+                        "Pages:           2\n"
+                        "Page    1 size:  612 x 792 pts (letter)\n"
+                        "Page    1 rot:   0\n"
+                        "Page    2 size:  792 x 612 pts (letter)\n"
+                        "Page    2 rot:   0\n"))
                 if args[0]=="pdftoppm":
                     renders.append(args)
                     pathlib.Path(args[-1]+".jpg").write_bytes(b"test-rendered-page")
