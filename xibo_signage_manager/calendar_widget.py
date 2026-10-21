@@ -11,10 +11,10 @@ WIDGET_NAME="XSM - Events and Birthdays"
 LEGACY_WIDGET_NAME="Events / Birthdays (10-second alternating)"
 CAL_STYLE="""*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;padding:0;background:transparent!important;overflow:hidden;font-family:Verdana,Arial,sans-serif}
 #xsm-calendar{position:relative;width:100%;height:100%;overflow:hidden;color:#090909}
-.xsm-panel{position:absolute;left:0;top:0;width:100%;height:100%;transform:translateY(110%);background:transparent;display:flex;flex-direction:column}
-.xsm-panel[data-panel="events"]{transform:translateY(0%)}
-.xsm-panel.xsm-arriving{transition:transform 850ms ease;transform:translateY(0%)}
-.xsm-panel.xsm-departing{transition:transform 850ms ease;transform:translateY(-110%)}
+.xsm-panel{position:absolute;left:0;top:0;width:100%;height:100%;transform:translateX(-110%);background:transparent;display:flex;flex-direction:column}
+.xsm-panel[data-panel="events"]{transform:translateX(0%)}
+.xsm-panel.xsm-arriving{transition:transform 850ms ease;transform:translateX(0%)}
+.xsm-panel.xsm-departing{transition:transform 850ms ease;transform:translateX(110%)}
 .xsm-heading{height:98px;min-height:98px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:58px;line-height:1.1}
 .xsm-list{background:#fff;border-radius:24px;flex:1;overflow:hidden;padding:20px 36px 20px}
 .xsm-item{padding:21px 8px 22px;border-bottom:2px solid #dedede}
@@ -25,8 +25,8 @@ CAL_STYLE="""*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;p
 CAL_SCRIPT=r'''<script>
 (function(){var started=false,index=0;
 function swap(){var panels=document.querySelectorAll('#xsm-calendar .xsm-panel');if(panels.length!==2)return;
-var old=panels[index],next=panels[1-index];next.classList.remove('xsm-departing');next.style.transition='none';next.style.transform='translateY(110%)';void next.offsetHeight;next.style.transition='';old.classList.add('xsm-departing');next.classList.add('xsm-arriving');old.style.transform='translateY(-110%)';next.style.transform='translateY(0%)';
-window.setTimeout(function(){old.classList.remove('xsm-departing');old.style.transform='translateY(110%)';next.classList.remove('xsm-arriving');next.style.transform='translateY(0%)';},950);index=1-index;}
+var old=panels[index],next=panels[1-index];next.classList.remove('xsm-departing');next.style.transition='none';next.style.transform='translateX(-110%)';void next.offsetHeight;next.style.transition='';old.classList.add('xsm-departing');next.classList.add('xsm-arriving');old.style.transform='translateX(110%)';next.style.transform='translateX(0%)';
+window.setTimeout(function(){old.classList.remove('xsm-departing');old.style.transform='translateX(-110%)';next.classList.remove('xsm-arriving');next.style.transform='translateX(0%)';},950);index=1-index;}
 function init(){if(started)return;started=true;window.setInterval(swap,10000);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();window.EmbedInit=init;
 })();
