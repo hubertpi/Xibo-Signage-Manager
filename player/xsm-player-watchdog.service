@@ -1,0 +1,7 @@
+[Unit]
+Description=Check Xibo local server and Chromium renderer responsiveness
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/xsm-player/watchdog.py
+TimeoutStartSec=60

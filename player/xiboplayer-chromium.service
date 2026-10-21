@@ -1,0 +1,20 @@
+[Unit]
+Description=Xibo Chromium player (desktop session)
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecCondition=/usr/bin/test ! -e %h/.local/state/xsm-player/paused
+Environment=XIBOPLAYER_DEBUG_PORT=9222
+ExecStart=/usr/bin/xiboplayer-chromium --log-level=WARNING
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+LimitCORE=0
+StandardOutput=journal
+StandardError=journal
+
+# Started by the XDG desktop-login hook, after DISPLAY/XAUTHORITY are available.
+# Raspberry Pi's rpd-x session does not reliably start graphical-session.target.

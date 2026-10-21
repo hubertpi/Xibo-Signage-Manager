@@ -4,6 +4,9 @@ Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a 
 
 ## Installation
 
+For a Raspberry Pi display, see the [one-command player deployment](player/README.md)
+with desktop startup, cursor hiding, watchdog and optional Home Assistant MQTT controls.
+
 Add `https://github.com/hubertpi/Xibo-Signage-Manager` to the Home Assistant add-on repository and configure the Xibo CMS URL and OAuth client credentials. MQTT creates a Xibo Signage Manager device with sync status and controls.
 
 ## Source paths
