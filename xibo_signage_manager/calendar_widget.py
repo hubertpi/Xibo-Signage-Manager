@@ -32,7 +32,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>'''
 
-def events_from_ics(url:str,days=90,limit=8,now=None):
+def events_from_ics(url:str,days=30,limit=8,now=None):
     if not url:return None
     if not url.lower().startswith(("https://","http://")):
         raise ValueError("Calendar feed URL must start with http(s)")
