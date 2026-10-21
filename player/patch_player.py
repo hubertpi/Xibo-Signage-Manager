@@ -11,16 +11,17 @@ import shutil
 import subprocess
 
 MARKER = '/* xsm-playback-page-only */'
+PWA_VERSION = '0.7.22'
 
 
 def guard_bundle(text):
     if MARKER in text or 'if(!document.getElementById(`player-container`))return;' in text:
         return text
-    # v0.7.15 Vite bundle. Match the bootstrap, not every class constructor.
+    # v0.7.22 Vite bundle. Match the bootstrap, not every class constructor.
     pattern = r'(function [\w$]+\(\)\{)(let ([\w$]+)=new [\w$]+;\3\.init\(\)\.catch\()'
     matches = list(re.finditer(pattern, text))
     if len(matches) != 1:
-        raise ValueError('Unexpected v0.7.15 bootstrap; no player files changed')
+        raise ValueError('Unexpected player bootstrap; no player files changed')
     match = matches[0]
     insert = match.end(1)
     return text[:insert] + MARKER + 'if(!document.getElementById("player-container"))return;' + text[insert:]
@@ -30,8 +31,8 @@ def patch(dist):
     manifest = dist.parent / 'package.json'
     version = json.loads(manifest.read_text())['version']
     # Other releases need validation before deploying them with this recipe.
-    if version != '0.7.15':
-        raise ValueError(f'Unvalidated bundled PWA version {version}; expected 0.7.15')
+    if version != PWA_VERSION:
+        raise ValueError(f'Unvalidated bundled PWA version {version}; expected {PWA_VERSION}')
     candidates = list((dist / 'assets').glob('main-*.js'))
     if len(candidates) != 1:
         raise ValueError('Expected exactly one main player bundle')
