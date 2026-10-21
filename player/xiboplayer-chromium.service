@@ -7,7 +7,9 @@ StartLimitBurst=5
 Type=simple
 ExecCondition=/usr/bin/test ! -e %h/.local/state/xsm-player/paused
 Environment=XIBOPLAYER_DEBUG_PORT=9222
+ExecStartPre=/usr/bin/python3 /opt/xsm-player/cleanup_browser.py
 ExecStart=/usr/bin/xiboplayer-chromium --log-level=WARNING
+ExecStopPost=/usr/bin/python3 /opt/xsm-player/cleanup_browser.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=20

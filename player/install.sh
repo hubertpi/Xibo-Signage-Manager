@@ -77,7 +77,7 @@ systemctl --user stop xsm-player-watchdog.timer 2>/dev/null || true
 systemctl --user stop xiboplayer-chromium.service 2>/dev/null || true
 sudo apt-get install -y "xiboplayer-chromium=$player_version"
 sudo install -d -m 0755 /opt/xsm-player
-for name in patch_player.py configure.py watchdog.py session-start.sh control.sh \
+for name in patch_player.py configure.py watchdog.py cleanup_browser.py session-start.sh control.sh \
             player-start.sh player-stop.sh player-restart.sh check-updates.sh check-updates-user.sh; do
     sudo install -m 0755 "$source_dir/$name" "/opt/xsm-player/$name"
 done
