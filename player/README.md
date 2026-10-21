@@ -20,7 +20,7 @@ required. Add `--configure` to enter CMS details privately in SSH; otherwise use
 the player's setup screen. CMS authorization remains an administrator action.
 CMS and MQTT secrets are stored locally with mode 0600 and never committed.
 
-The recipe installs the validated player 0.7.22-1 (bundled PWA 0.7.15), selects
+The recipe installs the validated player 0.7.22-1 (bundled PWA 0.7.22), selects
 X11, enables desktop auto-login, installs `unclutter-xfixes`, and sets timezone
 America/Chicago. Use `--timezone=Europe/London` or another timezone to override;
 `--no-autologin` preserves the existing login policy. Desktop auto-login is needed

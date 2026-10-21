@@ -56,6 +56,27 @@ class SetupGuardTests(unittest.TestCase):
                 guard.patch(dist)
             self.assertEqual(list(dist.iterdir()), [])
 
+    def test_installed_0722_manifest_is_accepted_and_patch_is_repeatable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            dist = root / 'dist'
+            assets = dist / 'assets'
+            assets.mkdir(parents=True)
+            (root / 'package.json').write_text('{"version":"0.7.22"}')
+            bundle = assets / 'main-DZuP3atR.js'
+            bundle.write_text(self.bundle)
+            index = dist / 'index.html'
+            index.write_text('<head><script>/* xmds-response-diagnostic */test()</script><title>Keep</title></head>')
+            guard.patch(dist)
+            fixed = bundle.read_text()
+            self.assertIn(guard.MARKER, fixed)
+            backup = assets / 'main-DZuP3atR.js.before-xsm-setup-guard'
+            self.assertEqual(backup.read_text(), self.bundle)
+            guard.patch(dist)
+            self.assertEqual(bundle.read_text(), fixed)
+            self.assertEqual(backup.read_text(), self.bundle)
+            self.assertEqual(index.read_text(), '<head><title>Keep</title></head>')
+
 
 class ConfigurationTests(unittest.TestCase):
     def test_repair_preserves_credentials_identity_and_custom_settings(self):
