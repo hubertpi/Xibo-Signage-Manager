@@ -55,11 +55,14 @@ class LiveLayoutTests(unittest.TestCase):
         ]}
         updates = _clock_region_updates(layout)
         self.assertEqual([r["regionId"] for r, target in updates], [11, 14])
-        self.assertGreater(
+        self.assertEqual(
             CLOCK_GEOMETRY["Live Date"]["top"] -
             (CLOCK_GEOMETRY["Live Time"]["top"] + CLOCK_GEOMETRY["Live Time"]["height"]),
-            40
+            22
         )
+        self.assertEqual((CLOCK_GEOMETRY["Live Time"]["top"] +
+                          CLOCK_GEOMETRY["Live Date"]["top"] +
+                          CLOCK_GEOMETRY["Live Date"]["height"]) / 2, 190)
         for region, target in updates:
             region.update(target)
         self.assertEqual(_clock_region_updates(layout), [])

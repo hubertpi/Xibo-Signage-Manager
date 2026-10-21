@@ -128,8 +128,8 @@ def rename_bulletins(folder):
     return records
 
 def pdf_pages(path,digest,cache_dir):
-    """Render pages at the panel's 2608x2104 bounding size and cache by SHA."""
-    cache = pathlib.Path(cache_dir)/digest
+    """Render PDF pages at aspect-preserving dimensions within 2608x2104."""
+    cache = pathlib.Path(cache_dir)/("aspect-v2-"+digest)
     cache.mkdir(parents=True,exist_ok=True)
     info = subprocess.run(["pdfinfo",str(path)],capture_output=True,
                           text=True,timeout=30,check=True)
@@ -139,13 +139,29 @@ def pdf_pages(path,digest,cache_dir):
     count = int(m.group(1))
     if not 1 <= count <= 100:
         raise ValueError("PDF page count must be 1-100: " + path.name)
+    # Read each page's own dimensions: a PDF may mix portrait and landscape.
+    dimensions = {}
+    for match in re.finditer(r"^Page\s+(\d+)\s+size:\s*([\d.]+)\s+x\s+([\d.]+)\s+pts", info.stdout, re.M):
+        dimensions[int(match.group(1))] = (float(match.group(2)), float(match.group(3)))
+    rotations = {
+        int(m.group(1)): int(m.group(2))
+        for m in re.finditer(r"^Page\s+(\d+)\s+rot:\s*(\d+)", info.stdout, re.M)
+    }
+    if len(dimensions) != count:
+        raise ValueError("Cannot determine all PDF page sizes: " + path.name)
     output = []
     for n in range(1,count+1):
         target = cache/f"p{n:04d}.jpg"
         if not target.is_file() or target.stat().st_size == 0:
             prefix = cache/f"new{n:04d}"
+            width, height = dimensions[n]
+            if rotations.get(n, 0) % 180:
+                width, height = height, width
+            ratio = min(2608 / width, 2104 / height)
+            out_width = max(1, round(width * ratio))
+            out_height = max(1, round(height * ratio))
             subprocess.run(["pdftoppm","-f",str(n),"-l",str(n),
-                "-scale-to-x","2608","-scale-to-y","2104",
+                "-scale-to-x",str(out_width),"-scale-to-y",str(out_height),
                 "-jpeg","-jpegopt","quality=90","-singlefile",
                 str(path),str(prefix)],timeout=120,check=True,
                 stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
@@ -247,89 +263,127 @@ def cleanup_assets(api,state,used,save_state):
             del assets[key]
             save_state()
 
-def widget_media_id(widget):
-    media = widget.get("mediaIds") or []
-    if isinstance(media,list) and media:
-        first=media[0]
-        return int(first.get("mediaId") if isinstance(first,dict) else first)
-    return None
+
+# Run the slideshow INSIDE an Embedded widget's iframe, not with Xibo's
+# native fly animations: its region elements do not clip overflowing media.
+SLIDESHOW_WIDGET_NAME = "XSM - Clipped Bulletin Slideshow"
+SLIDESHOW_STYLE = """*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent!important}
+#xsm-slideshow{position:relative;width:100%;height:100%;overflow:hidden;border-radius:34px;isolation:isolate;background:#fff}
+#xsm-slideshow .xsm-picture{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:center center;background:#fff;display:none;transform:translateX(100%);will-change:transform}
+#xsm-slideshow .xsm-source{display:none}
+#xsm-slideshow .xsm-empty{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;text-align:center;font:bold 40px Arial,sans-serif;color:#777}"""
+SLIDESHOW_SCRIPT = r'''<script>
+(function(){
+var started=false;
+function init(){
+ if(started)return;started=true;
+ var entries=Array.prototype.slice.call(document.querySelectorAll("#xsm-slideshow .xsm-source")).map(function(el){
+  return {url:el.getAttribute("data-url"),ms:Math.max(1000,parseInt(el.getAttribute("data-ms"),10)||10000)};
+ });
+ if(!entries.length)return;
+ var front=document.getElementById("xsm-front"),back=document.getElementById("xsm-back");
+ front.src=entries[0].url;front.style.display="block";front.style.transform="translateX(0)";
+ var current=0;
+ function advance(){
+  if(entries.length===1){window.setTimeout(advance,entries[0].ms);return;}
+  var next=(current+1)%entries.length, incoming=back, outgoing=front;
+  incoming.style.transition="none";
+  incoming.style.transform="translateX(100%)";
+  incoming.style.display="block";
+  incoming.src=entries[next].url;
+  // Force initial position before enabling the westward 800ms animation.
+  void incoming.offsetWidth;
+  outgoing.style.transition="transform 800ms ease";
+  incoming.style.transition="transform 800ms ease";
+  incoming.style.transform="translateX(0)";
+  outgoing.style.transform="translateX(-100%)";
+  window.setTimeout(function(){
+   outgoing.style.transition="none";
+   outgoing.style.display="none";
+   outgoing.style.transform="translateX(100%)";
+   front=incoming;back=outgoing;current=next;
+   window.setTimeout(advance,entries[current].ms);
+  },820);
+ }
+ window.setTimeout(advance,entries[0].ms);
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
+window.EmbedInit=init;
+})();
+</script>'''
+
+def slideshow_payload(slides):
+    """Generate a bounded, rounded, locally animated slideshow.
+
+    Xibo's [mediaId] substitutions in Embedded HTML register each referenced
+    library asset for Player download, including generated PDF page images.
+    """
+    sources = "".join(
+        f'<span class="xsm-source" data-url="[{int(slide["media_id"])}]" '
+        f'data-ms="{int(slide["duration"])*1000}"></span>'
+        for slide in slides
+    )
+    empty = '' if slides else '<div class="xsm-empty">No bulletins available</div>'
+    markup = ('<div id="xsm-slideshow" data-xsm-slideshow="1">'
+              '<img id="xsm-front" class="xsm-picture" alt="">'
+              '<img id="xsm-back" class="xsm-picture" alt="">'
+              + sources + empty + '</div>')
+    return {
+        "name":SLIDESHOW_WIDGET_NAME,"useDuration":"1",
+        "duration":"3600","enableStat":"Inherit",
+        "transparency":"1","scaleContent":"1","isPreNavigate":"0",
+        "embedHtml":markup,"embedStyle":SLIDESHOW_STYLE,
+        "embedScript":SLIDESHOW_SCRIPT,"embedJavaScript":"",
+    }
 
 def widget_options(widget):
     return {x.get("option"):str(x.get("value"))
             for x in widget.get("widgetOptions") or [] if isinstance(x,dict)}
 
 def needs_playlist_sync(playlist,slides):
-    if int(playlist.get("isDynamic") or 0):return True
-    widgets = sorted(playlist.get("widgets") or [],
-                     key=lambda w:int(w.get("displayOrder") or 0))
-    if len(widgets)!=len(slides):return True
-    for widget,slide in zip(widgets,slides):
-        if (widget_media_id(widget)!=slide["media_id"]
-                or int(widget.get("duration") or 0)!=slide["duration"]
-                or int(widget.get("useDuration") or 0)!=1):
-            return True
-        opts=widget_options(widget)
-        if (opts.get("transIn")!="fly" or opts.get("transOut")!="fly"
-                or opts.get("transInDirection")!="W"
-                or opts.get("transOutDirection")!="W"
-                or opts.get("transInDuration")!="800"
-                or opts.get("transOutDuration")!="800"):
-            return True
-    return False
+    if int(playlist.get("isDynamic") or 0):
+        return True
+    widgets=playlist.get("widgets") or []
+    if len(widgets)!=1 or widgets[0].get("type")!="embedded":
+        return True
+    widget=widgets[0]
+    wanted=slideshow_payload(slides)
+    opts=widget_options(widget)
+    if int(widget.get("duration") or 0)!=3600 or int(widget.get("useDuration") or 0)!=1:
+        return True
+    return any(opts.get(key)!=value for key,value in wanted.items()
+               if key in ("name","embedHtml","embedStyle","embedScript","embedJavaScript"))
 
 def apply_playlist(api,playlist,slides,reload_playlist):
-    """Convert dynamic playlist once; reassign, time and transition each slide."""
+    """Replace native media fly transitions with an iframe-clipped slideshow."""
     playlist_id=int(playlist["playlistId"])
     if int(playlist.get("isDynamic") or 0):
         api("PUT",f"playlist/{playlist_id}",data={
             "name":"XSM - Bulletin Slideshow","isDynamic":"0",
             "folderId":str(playlist.get("folderId") or 1),
             "enableStat":"Inherit"})
-    widgets=playlist.get("widgets") or []
-    unused=list(widgets)
-    kept={}
-    for slide in slides:
-        for widget in list(unused):
-            if widget_media_id(widget)==slide["media_id"]:
-                kept[slide["media_id"]]=widget
-                unused.remove(widget)
-                break
-    for widget in unused:
+    current=playlist.get("widgets") or []
+    matches=[w for w in current if w.get("type")=="embedded"
+             and widget_options(w).get("name")==SLIDESHOW_WIDGET_NAME]
+    selected=matches[0] if matches else None
+    for widget in current:
+        if selected and int(widget["widgetId"])==int(selected["widgetId"]):
+            continue
         api("DELETE",f"playlist/widget/{int(widget['widgetId'])}")
-    for order,slide in enumerate(slides,1):
-        if slide["media_id"] not in kept:
-            api("POST",f"playlist/library/assign/{playlist_id}",data={
-                "media[0]":str(slide["media_id"]),"duration":str(slide["duration"]),
-                "useDuration":"1","displayOrder":str(order)})
-    latest=reload_playlist()
-    by_media={}
-    for widget in latest.get("widgets") or []:
-        by_media.setdefault(widget_media_id(widget),[]).append(widget)
-    sequence=[]
-    for slide in slides:
-        choices=by_media.get(slide["media_id"]) or []
-        if not choices:
-            raise RuntimeError("Xibo did not assign media "+str(slide["media_id"]))
-        widget=choices.pop(0)
-        sequence.append(widget)
-        wid=int(widget["widgetId"])
-        if (int(widget.get("duration") or 0)!=slide["duration"]
-                or int(widget.get("useDuration") or 0)!=1):
-            api("PUT",f"playlist/widget/{wid}",data={
-                "useDuration":"1","duration":str(slide["duration"]),
-                "name":slide["title"],"enableStat":"Inherit"})
-        opts=widget_options(widget)
-        for direction in ("in","out"):
-            prefix="transIn" if direction=="in" else "transOut"
-            if (opts.get(prefix)!="fly" or opts.get(prefix+"Direction")!="W"
-                    or opts.get(prefix+"Duration")!="800"):
-                api("PUT",f"playlist/widget/transition/{direction}/{wid}",data={
-                    "transitionType":"fly","transitionDuration":"800",
-                    "transitionDirection":"W"})
-    if sequence and any(int(widget.get("displayOrder") or 0)!=index
-                        for index,widget in enumerate(sequence,1)):
-        api("POST",f"playlist/order/{playlist_id}",data={
-            f"widgets[{int(widget['widgetId'])}]":str(index)
-            for index,widget in enumerate(sequence,1)})
-    LOG.info("Sequenced slideshow playlist %s with %d images/pages",
-             playlist_id,len(slides))
+    if selected is None:
+        created=api("POST",f"playlist/widget/embedded/{playlist_id}",data={})
+        widget_id=created.get("id") if isinstance(created,dict) else None
+        if not widget_id and isinstance(created,dict):
+            widget_id=(created.get("data") or {}).get("widgetId")
+        if not widget_id:
+            refreshed=reload_playlist()
+            candidates=[w for w in refreshed.get("widgets") or []
+                        if w.get("type")=="embedded"]
+            if len(candidates)!=1:
+                raise RuntimeError("Xibo created a slideshow widget but returned no usable widget ID")
+            widget_id=candidates[0]["widgetId"]
+    else:
+        widget_id=selected["widgetId"]
+    api("PUT",f"playlist/widget/{int(widget_id)}",data=slideshow_payload(slides))
+    LOG.info("Updated clipped slideshow widget %s with %d media pages",
+             widget_id,len(slides))
