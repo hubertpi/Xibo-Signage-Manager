@@ -16,6 +16,7 @@ import requests
 import paho.mqtt.client as mqtt
 from counter_widget import counter_targets, render_counter_markup, get_widget_option, WIDGET_NAME, COUNTER_STYLE, COUNTER_SCRIPT
 from layout_sync import sync_live_layout
+from slideshow import rename_bulletins, sync_media, cleanup_assets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("xibo-signage")
@@ -183,70 +184,23 @@ def sync():
     publish()
     problems = []
     try:
-        managed = managed_library()
+        records = rename_bulletins(PATH)
         RUNTIME["connection"] = True
-        files = scan()
-        RUNTIME["bulletins"] = len(files)
-        present = set()
-        for path in files:
-            present.add(path.name)
-            try:
-                if not is_stable(path):
-                    LOG.info("Waiting for completed copy: %s", path.name)
-                    continue
-                digest = file_hash(path)
-                prior = STATE["files"].get(path.name)
-                if not prior:
-                    existing = find_managed_media(managed, path.name)
-                    if existing:
-                        media_id = int(existing["mediaId"])
-                        title = existing["name"]
-                        LOG.info("Recovered existing managed media %s (media %s)", path.name, media_id)
-                        prior = {"media_id": media_id, "name": title}
-                        # Previous successful uploads should be adopted without re-uploading.
-                        if str(existing.get("md5", "")).lower() == file_md5(path):
-                            prior["sha256"] = digest
-                        STATE["files"][path.name] = prior
-                        save_state()
-                if prior and prior.get("sha256") == digest:
-                    continue
-                old_id = prior.get("media_id") if prior else None
-                title = prior.get("name", path.name) if prior else managed_title(path.name)
-                new_id = upload(path, old_id, title)
-                STATE["files"][path.name] = {
-                    "sha256": digest, "media_id": new_id, "name": title}
-                save_state()
-                action = "Replaced" if old_id else "Imported"
-                LOG.info("%s %s (Xibo title %s): media %s -> %s",
-                         action, path.name, title, old_id, new_id)
-            except Exception as exc:
-                LOG.exception("Import/update failed for %s", path.name)
-                problems.append(f"{path.name}: {exc}")
-        for missing in sorted(set(STATE["files"]) - present):
-            media_id = STATE["files"][missing].get("media_id")
-            try:
-                if media_id is not None:
-                    api("DELETE", f"library/{int(media_id)}",
-                        data={"forceDelete": "1", "purge": "1"})
-                del STATE["files"][missing]
-                save_state()
-                LOG.info("Deleted removed bulletin %s (media %s)", missing, media_id)
-            except requests.HTTPError as exc:
-                if exc.response is not None and exc.response.status_code == 404:
-                    del STATE["files"][missing]
-                    save_state()
-                    LOG.info("Previously removed from Xibo: %s", missing)
-                else:
-                    LOG.exception("Delete failed for %s", missing)
-                    problems.append(f"Delete {missing}: {exc}")
-            except Exception as exc:
-                LOG.exception("Delete failed for %s", missing)
-                problems.append(f"Delete {missing}: {exc}")
+        if records is None:
+            # At least one upload is incomplete. Leave the previous layout
+            # intact until all files are stable.
+            RUNTIME["status"] = "waiting for file copy"
+            return
+        RUNTIME["bulletins"] = len(records)
+        slides, used = sync_media(
+            api, records, STATE, save_state,
+            pathlib.Path("/config/xsm_pdf_pages"), TAG)
         try:
-            sync_live_layout(api, OPTIONS, ACCIDENT)
+            sync_live_layout(api, OPTIONS, ACCIDENT, slides)
+            cleanup_assets(api, STATE, used, save_state)
         except (LookupError, ValueError, OSError, requests.HTTPError, RuntimeError) as exc:
             LOG.warning("Live Xibo layout not yet synchronized: %s", exc)
-            problems.append(f"Counter: {exc}")
+            problems.append(f"Layout: {exc}")
         except Exception as exc:
             LOG.exception("Live Xibo layout synchronization failed")
             problems.append(f"Counter: {exc}")
