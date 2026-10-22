@@ -4,7 +4,7 @@ import logging
 from zoneinfo import ZoneInfo
 from counter_widget import (
     WIDGET_NAME as COUNTER_NAME, LEGACY_WIDGET_NAME as LEGACY_COUNTER,
-    get_widget_option, build_widget_payload, widget_needs_update
+    get_widget_option, build_widget_payload, widget_needs_update, ensure_safety_media
 )
 from calendar_widget import (
     WIDGET_NAME as CALENDAR_NAME, LEGACY_WIDGET_NAME as LEGACY_CALENDAR,
@@ -149,7 +149,8 @@ def sync_live_layout(api,options,accident,slides):
     calendar=_widget(parts,"calendar")
     if not counter or not calendar:
         raise LookupError("Expected an Embedded accident counter and Events/Birthdays widget")
-    cp=build_widget_payload(day,counter)
+    safety_media_id=ensure_safety_media(api)
+    cp=build_widget_payload(day,counter,safety_media_id)
     calp=build_calendar_payload(events,birthdays,calendar,get_widget_option)
     need_counter=widget_needs_update(counter,cp)
     need_calendar=widget_needs_update(calendar,calp)
@@ -177,7 +178,7 @@ def sync_live_layout(api,options,accident,slides):
         parts=find_parts(layout)
         counter=_widget(parts,"counter")
         calendar=_widget(parts,"calendar")
-        cp=build_widget_payload(day,counter)
+        cp=build_widget_payload(day,counter,safety_media_id)
         calp=build_calendar_payload(events,birthdays,calendar,get_widget_option)
         need_counter=widget_needs_update(counter,cp)
         need_calendar=widget_needs_update(calendar,calp)

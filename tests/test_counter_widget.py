@@ -9,14 +9,16 @@ from datetime import date
 
 class CounterWidgetTests(unittest.TestCase):
     def test_embed_date_is_a_html_attribute(self):
-        markup = render_counter_markup(date(2026, 10, 1))
+        markup = render_counter_markup(date(2026, 10, 1), 71)
         self.assertIn('data-last-accident="2026-10-01"', markup)
         self.assertIn("Days Since Last Accident", markup)
         self.assertIn('<text id="xsm-days"', markup)
-        self.assertIn('data:image/jpeg;base64,', markup)
+        self.assertIn('src="[[mediaId=71]]"', markup)
+        self.assertIn('data-library-ref="[71]"', markup)
+        self.assertNotIn('base64', markup)
 
     def test_blue_counter_has_daily_live_update(self):
-        self.assertIn("Days Since Last Accident", render_counter_markup(date(2026, 10, 1)))
+        self.assertIn("Days Since Last Accident", render_counter_markup(date(2026, 10, 1), 71))
         self.assertIn("setInterval(update,60000)", COUNTER_SCRIPT)
         self.assertIn("#0867b3", COUNTER_STYLE)
         self.assertNotIn("<style>", COUNTER_STYLE)

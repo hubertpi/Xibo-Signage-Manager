@@ -17,7 +17,7 @@ from urllib.parse import urljoin
 
 import requests
 import paho.mqtt.client as mqtt
-from counter_widget import counter_targets, render_counter_markup, get_widget_option, WIDGET_NAME, COUNTER_STYLE, COUNTER_SCRIPT
+from counter_widget import counter_targets, render_counter_markup, get_widget_option, WIDGET_NAME, COUNTER_STYLE, COUNTER_SCRIPT, ensure_safety_media
 from layout_sync import sync_live_layout
 from slideshow import rename_bulletins, sync_media, cleanup_assets
 from display_layouts import DisplayLayoutMonitor
@@ -298,7 +298,8 @@ def sync_accident_counter():
 
     # A fully populated published widget needs no checkout or republish.
     # Never repeatedly churn layout versions when the file date is unchanged.
-    expected_markup = render_counter_markup(last_accident)
+    safety_media_id = ensure_safety_media(api)
+    expected_markup = render_counter_markup(last_accident, safety_media_id)
     if (int(layout.get("publishedStatusId") or 0) == 1
             and not layout.get("parentId")
             and get_widget_option(widget, "name") == WIDGET_NAME
@@ -321,7 +322,7 @@ def sync_accident_counter():
         widget_id = int(widget["widgetId"])
         desired["widget_id"] = widget_id
 
-    markup = render_counter_markup(last_accident)
+    markup = render_counter_markup(last_accident, safety_media_id)
     update = {"embedHtml": markup}
     if get_widget_option(widget, "name") != WIDGET_NAME:
         # Migrate the placeholder widget from the previously imported 4K layout.
