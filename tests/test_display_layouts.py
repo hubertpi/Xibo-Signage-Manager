@@ -11,7 +11,11 @@ from display_layouts import DisplayLayoutMonitor
 class DisplayLayoutTests(unittest.TestCase):
     def setUp(self):
         self.api, self.client = Mock(), Mock()
-        self.monitor = DisplayLayoutMonitor(self.api, self.client, 'xibo_signage_manager')
+        self.device = {'identifiers': ['xibo_signage_manager'],
+                       'name': 'Xibo Signage Manager',
+                       'manufacturer': 'Community', 'model': 'Bulletin Synchronizer'}
+        self.monitor = DisplayLayoutMonitor(self.api, self.client, 'xibo_signage_manager',
+                                            device=self.device)
 
     def display(self, identity=1, name='Bulletin Pi 01', **extra):
         return dict(displayId=identity, display=name, currentLayout='Main Bulletin',
@@ -29,7 +33,10 @@ class DisplayLayoutTests(unittest.TestCase):
         self.monitor.poll()
         configs = [json.loads(payload) for _,payload in self.sent('/config')]
         self.assertEqual(len(configs), 2)
-        self.assertEqual(configs[1]['device']['name'], 'Future Pi')
+        self.assertEqual(configs[1]['name'], 'Future Pi')
+        self.assertEqual(configs[0]['name'], 'Bulletin Pi 01')
+        self.assertTrue(all(config['device'] == self.device for config in configs))
+        self.assertNotIn('via_device', configs[0]['device'])
         self.assertNotEqual(configs[0]['unique_id'], configs[1]['unique_id'])
         self.assertEqual(self.monitor.known, {1,2})
         state = json.loads(self.sent('/state')[-1][1])
@@ -46,7 +53,10 @@ class DisplayLayoutTests(unittest.TestCase):
         self.monitor.poll()
         first,last = [json.loads(payload) for _,payload in self.sent('/config')]
         self.assertEqual(first['unique_id'], last['unique_id'])
-        self.assertEqual(last['device']['name'], 'Renamed Pi')
+        self.assertEqual(last['name'], 'Renamed Pi')
+        self.assertEqual(last['device'], self.device)
+        self.assertEqual(first['state_topic'], last['state_topic'])
+        self.assertEqual(last['unique_id'], 'xibo_signage_manager_display_1_current_layout')
         self.monitor.reconnect()
         self.monitor.poll()
         self.assertEqual(len(self.sent('/config')), 3)

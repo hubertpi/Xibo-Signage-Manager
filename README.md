@@ -1,6 +1,6 @@
 # Xibo Signage Manager
 
-Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.5.4`.
+Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.5.5`.
 
 ## Installation
 
@@ -67,7 +67,9 @@ guarantee prevention of screen burn-in.
 The add-on also discovers a Current Layout sensor for every CMS display the API
 user can view. It checks every minute, discovers future displays automatically,
 updates display names and removes discovery for deleted displays. Each sensor is
-under its own Xibo display device linked to the Signage Manager. It uses reported
+under the existing Xibo Signage Manager device and is named exactly as the display
+is named in Xibo. Existing 0.5.4 installations should reload the MQTT integration
+once after updating to apply the new device association. It uses reported
 `currentLayout`/`currentLayoutId`, never the assigned default. Missing reports,
 offline/deauthorised displays or failed CMS requests make the sensor unavailable.
 The Pi recipe includes a PWA 0.7.22 fix to report on layout start; existing Pis

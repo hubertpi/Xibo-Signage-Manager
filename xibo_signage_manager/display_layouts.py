@@ -3,8 +3,9 @@ import json
 
 
 class DisplayLayoutMonitor:
-    def __init__(self, api, client, prefix, known=()):
+    def __init__(self, api, client, prefix, known=(), device=None):
         self.api, self.client, self.prefix = api, client, prefix
+        self.device = device or {'identifiers': [prefix]}
         self.known = {int(value) for value in known}
         self.configs = {}
 
@@ -49,7 +50,7 @@ class DisplayLayoutMonitor:
                 layout = f'Layout {layout_id}'
             config_topic, state_topic, availability_topic = self.topics(display_id)
             config = json.dumps({
-                'name': 'Current Layout',
+                'name': name,
                 'unique_id': f'{self.prefix}_display_{display_id}_current_layout',
                 'state_topic': state_topic, 'value_template': '{{ value_json.layout }}',
                 'json_attributes_topic': state_topic,
@@ -57,10 +58,7 @@ class DisplayLayoutMonitor:
                 'availability_mode': 'all',
                 'availability': [{'topic': f'{self.prefix}/availability'},
                                  {'topic': availability_topic}],
-                'device': {'identifiers': [f'{self.prefix}_display_{display_id}'],
-                           'name': name, 'manufacturer': 'Xibo',
-                           'model': display.get('clientType') or 'Display',
-                           'via_device': self.prefix},
+                'device': self.device,
             }, sort_keys=True)
             if self.configs.get(display_id) != config:
                 self.publish(config_topic, config)
