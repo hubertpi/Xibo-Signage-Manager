@@ -20,6 +20,7 @@ import paho.mqtt.client as mqtt
 from counter_widget import counter_targets, render_counter_markup, get_widget_option, WIDGET_NAME, COUNTER_STYLE, COUNTER_SCRIPT
 from layout_sync import sync_live_layout
 from slideshow import rename_bulletins, sync_media, cleanup_assets
+from display_layouts import DisplayLayoutMonitor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("xibo-signage")
@@ -59,6 +60,7 @@ SHUTDOWN = threading.Event()
 TOKEN = None
 TOKEN_EXPIRY = 0
 CLIENT = None
+DISPLAY_MONITOR = None
 
 
 def save_state():
@@ -399,6 +401,8 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.publish(f"{PREFIX}/availability", "online", qos=1, retain=True)
     client.subscribe(f"{PREFIX}/set/#")
     setup_discovery()
+    if DISPLAY_MONITOR:
+        DISPLAY_MONITOR.reconnect()
     publish()
     LOG.info("MQTT connected and Home Assistant discovery published")
 
@@ -434,7 +438,7 @@ def request_shutdown(signum, _frame):
 
 
 def main():
-    global CLIENT
+    global CLIENT, DISPLAY_MONITOR
     LOG.info("Starting Xibo Signage Manager v%s (PID %d)", VERSION, os.getpid())
     LOG.info("Configuration: CMS=%s; bulletin folder=%s; layout=%s; tag=%s",
              OPTIONS["xibo_url"], PATH, OPTIONS["counter_layout_name"], TAG)
@@ -450,6 +454,8 @@ def main():
         CLIENT.username_pw_set(username, OPTIONS.get("mqtt_password", ""))
     CLIENT.on_connect = on_connect
     CLIENT.on_message = on_message
+    DISPLAY_MONITOR = DisplayLayoutMonitor(api, CLIENT, PREFIX,
+                                          STATE.get('display_layout_sensors', []))
     try:
         LOG.info("Connecting to MQTT broker %s:%s", OPTIONS["mqtt_host"], OPTIONS["mqtt_port"])
         CLIENT.connect_async(OPTIONS["mqtt_host"], int(OPTIONS["mqtt_port"]))
@@ -457,8 +463,11 @@ def main():
         LOG.info("Startup initialized; initial Xibo synchronization pending")
         DUE.set()
         next_poll = 0.0
+        next_display_poll = 0.0
+        display_error = None
         while not SHUTDOWN.is_set():
             wait = max(0, next_poll - time.monotonic()) if RUNTIME["auto"] else 2.0
+            wait = min(wait, max(0, next_display_poll - time.monotonic()))
             fired = DUE.wait(timeout=wait)
             DUE.clear()
             if SHUTDOWN.is_set():
@@ -469,6 +478,22 @@ def main():
                     next_poll = time.monotonic() + RUNTIME["interval"] * 60
             else:
                 publish()
+            if not SHUTDOWN.is_set() and time.monotonic() >= next_display_poll:
+                try:
+                    with LOCK:
+                        DISPLAY_MONITOR.poll()
+                        known = sorted(DISPLAY_MONITOR.known)
+                        if STATE.get('display_layout_sensors') != known:
+                            STATE['display_layout_sensors'] = known
+                            save_state()
+                    display_error = None
+                except Exception as exc:
+                    DISPLAY_MONITOR.unavailable()
+                    error = str(exc)
+                    if error != display_error:
+                        LOG.warning('Current-layout discovery failed; allow the API user to view Displays: %s', error)
+                        display_error = error
+                next_display_poll = time.monotonic() + 60
     finally:
         LOG.info("Stopping Xibo Signage Manager v%s", VERSION)
         if CLIENT is not None:

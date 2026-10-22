@@ -63,3 +63,12 @@ or stretching. Its original JPG is bundled and embedded directly in the widget
 for offline playback; no manual CMS media upload is needed. The counter remains
 visible if the image cannot load. This varies the counter content but does not
 guarantee prevention of screen burn-in.
+
+The add-on also discovers a Current Layout sensor for every CMS display the API
+user can view. It checks every minute, discovers future displays automatically,
+updates display names and removes discovery for deleted displays. Each sensor is
+under its own Xibo display device linked to the Signage Manager. It uses reported
+`currentLayout`/`currentLayoutId`, never the assigned default. Missing reports,
+offline/deauthorised displays or failed CMS requests make the sensor unavailable.
+The Pi recipe includes a PWA 0.7.22 fix to report on layout start; existing Pis
+must apply the updated player patch once. Other player types need no recipe change.

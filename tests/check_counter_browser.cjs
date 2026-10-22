@@ -18,6 +18,7 @@ print('<!doctype html><html><head><style>' + COUNTER_STYLE + '</style></head><bo
       const errors=[];
       page.on('pageerror', error=>errors.push(error.message));
       await page.clock.install({time:new Date('2026-10-22T17:00:00Z')});
+      await page.clock.pauseAt(new Date('2026-10-22T17:00:01Z'));
       await page.setContent(html, {waitUntil:'load'});
       await page.waitForFunction(()=>document.getElementById('xsm-safety-image').naturalWidth===612);
       assert.equal(await page.locator('#xsm-days').textContent(), '21');

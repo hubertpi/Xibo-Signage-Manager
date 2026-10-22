@@ -12,6 +12,23 @@ import subprocess
 
 MARKER = '/* xsm-playback-page-only */'
 PWA_VERSION = '0.7.22'
+STATUS_MARKER = '/* xsm-layout-start-report */'
+
+
+def report_layout_start(text):
+    if STATUS_MARKER in text:
+        return text
+    # Restrict the edit to the layoutStart event, after core records the active
+    # ID and running state. The original PWA only reports at layoutEnd.
+    event = re.search(r'this\.renderer\.on\([`\"]layoutStart[`\"],\(([\w$]+),[\w$]+\)=>\{', text)
+    if not event:
+        raise ValueError('Unexpected layoutStart handler; no player files changed')
+    call = 'this.core.setCurrentLayout(' + event.group(1) + ')'
+    index = text.find(call, event.end())
+    if index < 0 or index - event.end() > 500:
+        raise ValueError('Unexpected current-layout assignment; no player files changed')
+    updated = '(' + call + ',' + STATUS_MARKER + 'this.core.notifyLayoutStatus(' + event.group(1) + '))'
+    return text[:index] + updated + text[index + len(call):]
 
 
 def guard_bundle(text):
@@ -38,7 +55,7 @@ def patch(dist):
         raise ValueError('Expected exactly one main player bundle')
     path = candidates[0]
     current = path.read_text()
-    updated = guard_bundle(current)
+    updated = report_layout_start(guard_bundle(current))
     if updated != current:
         subprocess.run(['node', '--input-type=module', '--check'], input=updated,
                        text=True, capture_output=True, check=True)
@@ -54,7 +71,7 @@ def patch(dist):
                      '', html, flags=re.S)
     if cleaned != html:
         index.write_text(cleaned)
-    print(f'PWA {version}: playback-page guard ready (no scaling changes)')
+    print(f'PWA {version}: setup guard and layout-start reporting ready (no scaling changes)')
 
 
 if __name__ == '__main__':

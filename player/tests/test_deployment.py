@@ -64,18 +64,35 @@ class SetupGuardTests(unittest.TestCase):
             assets.mkdir(parents=True)
             (root / 'package.json').write_text('{"version":"0.7.22"}')
             bundle = assets / 'main-DZuP3atR.js'
-            bundle.write_text(self.bundle)
+            original = self.bundle + 'function bind(){this.renderer.on(`layoutStart`,(id,layout)=>{this.core.setCurrentLayout(id);});}'
+            bundle.write_text(original)
             index = dist / 'index.html'
             index.write_text('<head><script>/* xmds-response-diagnostic */test()</script><title>Keep</title></head>')
             guard.patch(dist)
             fixed = bundle.read_text()
             self.assertIn(guard.MARKER, fixed)
             backup = assets / 'main-DZuP3atR.js.before-xsm-setup-guard'
-            self.assertEqual(backup.read_text(), self.bundle)
+            self.assertEqual(backup.read_text(), original)
             guard.patch(dist)
             self.assertEqual(bundle.read_text(), fixed)
-            self.assertEqual(backup.read_text(), self.bundle)
+            self.assertEqual(backup.read_text(), original)
             self.assertEqual(index.read_text(), '<head><title>Keep</title></head>')
+
+    def test_layout_report_occurs_on_start_after_core_state_is_set(self):
+        source = 'function bind(){this.renderer.on(`layoutStart`,(id,layout)=>{this.core.setCurrentLayout(id);});}'
+        fixed = guard.report_layout_start(source)
+        self.assertEqual(guard.report_layout_start(fixed), fixed)
+        harness = fixed + '''
+const calls=[];let handler;
+const player={renderer:{on(name,fn){handler=fn;}},core:{
+setCurrentLayout(id){calls.push(['set',id]);},
+notifyLayoutStatus(id){calls.push(['notify',id]);}}};
+bind.call(player);handler(24,{});
+console.log(JSON.stringify(calls));'''
+        result = subprocess.check_output(['node', '-e', harness], text=True)
+        self.assertEqual(json.loads(result), [['set',24],['notify',24]])
+        with self.assertRaises(ValueError):
+            guard.report_layout_start('unrecognised bundle')
 
 
 class ConfigurationTests(unittest.TestCase):
