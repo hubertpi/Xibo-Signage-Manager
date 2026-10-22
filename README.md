@@ -1,6 +1,6 @@
 # Xibo Signage Manager
 
-Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.5.5`.
+Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.5.6`.
 
 ## Installation
 
@@ -59,8 +59,9 @@ The accident-counter region alternates between the live SVG count for 30 seconds
 and the supplied Safety First image for 6 seconds. Both changes slide right over
 800 ms and stay clipped inside the existing region. Durations are fully visible
 hold times, excluding transitions. The complete image is contained without crop
-or stretching. Its original JPG is bundled and embedded directly in the widget
-for offline playback; no manual CMS media upload is needed. The counter remains
+or stretching. Its original JPG is bundled and automatically uploaded to the Xibo library.
+The widget links it for player download and offline playback; no manual upload
+is needed. This keeps widget HTML within the CMS audit record size limit. The counter remains
 visible if the image cannot load. This varies the counter content but does not
 guarantee prevention of screen burn-in.
 

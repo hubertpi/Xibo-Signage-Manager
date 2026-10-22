@@ -1,3 +1,11 @@
+## 0.5.6
+
+- Upload the Safety First image automatically to Xibo's media library and reuse
+  it across syncs and restarts. The widget uses a linked, downloadable image.
+- Remove the large base64 image from widget HTML to stay within Xibo's 64 KB
+  audit record limit and allow the counter rotation update to publish.
+- Keep the 30-second counter, 6-second image and rightward slide timing.
+
 ## 0.5.5
 
 - Group all display layout sensors under the existing Xibo Signage Manager device.

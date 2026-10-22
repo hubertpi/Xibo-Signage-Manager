@@ -1,5 +1,4 @@
 """Execute the shipped widget script against deterministic timers and DOM state."""
-import base64
 from datetime import date
 import json
 from pathlib import Path
@@ -11,16 +10,54 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'xibo_signage_manager'))
-from counter_widget import COUNTER_SCRIPT, render_counter_markup
+from counter_widget import (COUNTER_SCRIPT, render_counter_markup,
+                            build_widget_payload, ensure_safety_media, SAFETY_TAG)
 
 
 class SafetyAssetTests(unittest.TestCase):
-    def test_embedded_image_matches_bundled_original(self):
-        markup = render_counter_markup(date(2026, 10, 1))
-        encoded = re.search(r'src="data:image/jpeg;base64,([^"]+)"', markup).group(1)
-        self.assertEqual(base64.b64decode(encoded),
-                         (ROOT / 'xibo_signage_manager/assets/safety-first.jpg').read_bytes())
+    def test_library_reference_keeps_xibo_audit_record_under_text_limit(self):
+        payload = build_widget_payload(date(2026, 10, 1), {'duration': 3600}, 71)
+        markup = payload['embedHtml']
+        self.assertIn('src="[[mediaId=71]]"', markup)
+        # Xibo applyProperties links numeric single-bracket refs for RequiredFiles.
+        self.assertIn('data-library-ref="[71]"', markup)
+        self.assertNotIn('base64', markup)
         self.assertIn('aria-hidden="true"', markup)
+        # Audit saves JSON-encoded widget option changes inside another JSON record.
+        record = json.dumps({'widgetOptions': json.dumps(payload)}).encode('utf-8')
+        self.assertLess(len(record), 60000)
+
+    def test_upload_original_once_then_reuse_across_syncs_and_restarts(self):
+        library, uploads = [], []
+        def api(method, route, **kwargs):
+            self.assertEqual(route, 'library')
+            if method == 'GET':
+                self.assertEqual(kwargs['params'], {'tags': SAFETY_TAG, 'exactTags': 1})
+                return library
+            self.assertEqual(method, 'POST')
+            filename, stream, mime = kwargs['files']['files']
+            self.assertEqual(filename, 'safety-first.jpg')
+            self.assertEqual(mime, 'image/jpeg')
+            self.assertEqual(stream.read(),
+                             (ROOT / 'xibo_signage_manager/assets/safety-first.jpg').read_bytes())
+            uploads.append(kwargs['data'])
+            library.append({'name': kwargs['data']['name'], 'mediaId': 81, 'retired': 0})
+            return {'files': [{'mediaId': 81}]}
+        self.assertEqual(ensure_safety_media(api), 81)
+        self.assertEqual(ensure_safety_media(api), 81)
+        self.assertEqual(len(uploads), 1)
+        self.assertEqual(uploads[0]['tags'], SAFETY_TAG)
+
+    def test_failed_upload_never_produces_a_broken_widget_reference(self):
+        def api(method, route, **kwargs):
+            return [] if method == 'GET' else {'files': [{'error': 'Forbidden'}]}
+        with self.assertRaisesRegex(ValueError, 'rejected'):
+            ensure_safety_media(api)
+
+    def test_deleted_image_is_uploaded_again(self):
+        def api(method, route, **kwargs):
+            return [] if method == 'GET' else {'files': [{'mediaId': 99}]}
+        self.assertEqual(ensure_safety_media(api), 99)
 
 
 @unittest.skipUnless(shutil.which('node'), 'requires Node to execute the actual widget script')

@@ -1,8 +1,8 @@
 """Responsive SVG text safety counter for Xibo 4.5 Embedded widgets."""
 import datetime as dt
 import html
-import base64
-from functools import lru_cache
+import hashlib
+import logging
 from pathlib import Path
 WIDGET_NAME = "XSM - Accident Counter"
 LEGACY_WIDGET_NAME = "Days Since Last Incident"
@@ -20,32 +20,62 @@ function init(){if(started)return;started=true;update();window.setInterval(updat
 })();
 </script>'''
 
-@lru_cache(maxsize=1)
-def safety_image_uri():
-    image = Path(__file__).with_name('assets') / 'safety-first.jpg'
-    return 'data:image/jpeg;base64,' + base64.b64encode(image.read_bytes()).decode('ascii')
+SAFETY_TAG = "xsm_counter_assets"
 
-def render_counter_markup(last_accident:dt.date)->str:
+
+def ensure_safety_media(api):
+    """Reuse the bundled image in Xibo's library; never inline it in audit text."""
+    image = Path(__file__).with_name('assets') / 'safety-first.jpg'
+    digest = hashlib.sha256(image.read_bytes()).hexdigest()[:16]
+    title = f'XSM - Safety First - {digest}'
+    items = api('GET', 'library', params={'tags': SAFETY_TAG, 'exactTags': 1})
+    if not isinstance(items, list):
+        raise ValueError('Xibo safety image search returned invalid JSON')
+    for item in items:
+        if item.get('name') == title and str(item.get('retired', 0)) == '0':
+            media_id = int(item.get('mediaId') or 0)
+            if media_id > 0:
+                return media_id
+    with image.open('rb') as stream:
+        result = api('POST', 'library', data={'name': title, 'tags': SAFETY_TAG},
+                     files={'files': (image.name, stream, 'image/jpeg')})
+    uploaded = result.get('files', [result]) if isinstance(result, dict) else result
+    if not isinstance(uploaded, list):
+        raise ValueError('Xibo safety image upload returned invalid JSON')
+    for item in uploaded:
+        if not isinstance(item, dict) or item.get('error'):
+            raise ValueError('Xibo rejected the safety image upload')
+    media_id = next((int(item[key]) for item in uploaded
+                     for key in ('mediaId', 'media_id', 'id') if item.get(key)), 0)
+    if media_id <= 0:
+        raise ValueError('Xibo safety image upload did not provide a media ID')
+    logging.getLogger('xibo-signage').info('Uploaded Safety First library image %s', media_id)
+    return media_id
+
+def render_counter_markup(last_accident:dt.date, safety_media_id=None)->str:
     d=html.escape(last_accident.isoformat(),quote=True)
+    media_id = int(safety_media_id or 0)
+    source = f"[[mediaId={media_id}]]" if media_id > 0 else ""
+    dependency = f"[{media_id}]" if media_id > 0 else ""
     return f'''<div id="xsm-accident-counter" data-xsm-accident-counter="1" data-last-accident="{d}">
 <div id="xsm-counter-panel" class="xsm-counter-panel" aria-hidden="false">
 <svg viewBox="0 0 1120 400" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="Days since last accident" style="display:block;width:100%;height:100%;overflow:visible;">
 <text id="xsm-days" x="560" y="225" fill="#0867b3" font-family="Arial,Helvetica,sans-serif" font-size="235" font-weight="700" text-anchor="middle">—</text>
 <text x="560" y="343" fill="#0867b3" font-family="Arial,Helvetica,sans-serif" font-size="65" font-weight="500" text-anchor="middle">Days Since Last Accident</text>
 </svg></div>
-<div id="xsm-safety-panel" class="xsm-counter-panel" aria-hidden="true"><img id="xsm-safety-image" src="{safety_image_uri()}" alt="Safety First"></div></div>'''
+<div id="xsm-safety-panel" class="xsm-counter-panel" aria-hidden="true"><img id="xsm-safety-image" src="{source}" data-library-ref="{dependency}" alt="Safety First"></div></div>'''
 
 def get_widget_option(widget:dict,key:str):
     for opt in widget.get("widgetOptions",[]) or []:
         if opt.get("option")==key:return opt.get("value")
     return None
 
-def build_widget_payload(last_accident:dt.date,widget:dict):
+def build_widget_payload(last_accident:dt.date,widget:dict,safety_media_id):
     return {"name":WIDGET_NAME,"useDuration":"1",
             "duration":str(widget.get("duration") or 3600),
             "enableStat":get_widget_option(widget,"enableStat") or "Inherit",
             "transparency":"1","scaleContent":"1","isPreNavigate":"0",
-            "embedHtml":render_counter_markup(last_accident),
+            "embedHtml":render_counter_markup(last_accident,safety_media_id),
             "embedStyle":COUNTER_STYLE,"embedJavaScript":"","embedScript":COUNTER_SCRIPT}
 
 def widget_needs_update(widget:dict,payload:dict):

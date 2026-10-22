@@ -7,14 +7,15 @@ import sys
 from datetime import date
 sys.path.insert(0, 'xibo_signage_manager')
 from counter_widget import COUNTER_STYLE, COUNTER_SCRIPT, render_counter_markup
-print('<!doctype html><html><head><style>' + COUNTER_STYLE + '</style></head><body>' + render_counter_markup(date(2026,10,1)) + COUNTER_SCRIPT + '</body></html>')
-`], {encoding:'utf8'});
+print('<!doctype html><html><head><style>' + COUNTER_STYLE + '</style></head><body>' + render_counter_markup(date(2026,10,1), 71) + COUNTER_SCRIPT + '</body></html>')
+`], {encoding:'utf8'}).replaceAll('[[mediaId=71]]','https://xsm.test/safety-first.jpg');
 
 (async () => {
   const browser = await chromium.launch({headless:true, executablePath:process.env.CHROME_EXECUTABLE || undefined});
   try {
     for (const [width,height] of [[1120,400],[560,200]]) {
       const page = await browser.newPage({viewport:{width,height}});
+      await page.route('https://xsm.test/safety-first.jpg', route=>route.fulfill({path:'xibo_signage_manager/assets/safety-first.jpg',contentType:'image/jpeg'}));
       const errors=[];
       page.on('pageerror', error=>errors.push(error.message));
       await page.clock.install({time:new Date('2026-10-22T17:00:00Z')});
