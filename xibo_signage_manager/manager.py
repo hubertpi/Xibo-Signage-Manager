@@ -455,7 +455,7 @@ def main():
     CLIENT.on_connect = on_connect
     CLIENT.on_message = on_message
     DISPLAY_MONITOR = DisplayLayoutMonitor(api, CLIENT, PREFIX,
-                                          STATE.get('display_layout_sensors', []))
+                                          STATE.get('display_layout_sensors', []), device=DEVICE)
     try:
         LOG.info("Connecting to MQTT broker %s:%s", OPTIONS["mqtt_host"], OPTIONS["mqtt_port"])
         CLIENT.connect_async(OPTIONS["mqtt_host"], int(OPTIONS["mqtt_port"]))
