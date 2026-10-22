@@ -1,6 +1,9 @@
 import importlib.util
 import json
 import os
+import socket
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 from pathlib import Path
 import subprocess
 import tempfile
@@ -139,7 +142,32 @@ class WatchdogTests(unittest.TestCase):
                 patch.object(watchdog, 'build_opener', return_value=opener), \
                 patch.object(watchdog, 'get_json', return_value=[target]):
             result = watchdog.healthy_renderer()
+        self.assertEqual(opener.open.call_args.args[0], 'http://localhost:8766/player/index.html')
         return result, websocket, connection
+
+    def test_localhost_can_reach_an_ipv6_only_server(self):
+        class Server(HTTPServer):
+            address_family = socket.AF_INET6
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"healthy":true}')
+            def log_message(self, *args):
+                pass
+        try:
+            server = Server(('::1',0), Handler)
+        except OSError:
+            self.skipTest('IPv6 loopback unavailable')
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            self.assertEqual(watchdog.get_json(f'http://localhost:{port}/'), {'healthy':True})
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_probe_requires_javascript_response_and_closes_socket(self):
         target = dict(type='page', url='http://localhost:8766/player/index.html',

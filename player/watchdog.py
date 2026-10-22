@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
 """Local-only health watchdog. Never reboots the Pi or checks CMS availability."""
 import json
+import sys
 from pathlib import Path
 import subprocess
 import time
 from urllib.parse import urlsplit
 from urllib.request import build_opener, ProxyHandler
+from urllib.error import HTTPError, URLError
 
 UNIT = 'xiboplayer-chromium.service'
+
+
+def error_summary(error):
+    if isinstance(error, HTTPError):
+        return f'HTTP {error.code}'
+    if isinstance(error, URLError):
+        return f'URLError: {str(error.reason)[:180]}'
+    return type(error).__name__
 
 
 def decide(active, healthy, failures, last_restart, now, paused=False, age=999):
@@ -31,22 +41,30 @@ def get_json(url):
 def healthy_renderer():
     import websocket
     opener = build_opener(ProxyHandler({}))
-    with opener.open('http://127.0.0.1:8766/player/index.html', timeout=5) as response:
-        if response.status != 200:
-            return False
-    targets = get_json('http://127.0.0.1:9222/json/list')
+    # The server defaults to binding "localhost", which can be IPv6-only.
+    # Resolve it as the browser does instead of forcing the IPv4 loopback.
+    try:
+        with opener.open('http://localhost:8766/player/index.html', timeout=5) as response:
+            if response.status != 200:
+                return False
+    except Exception as error:
+        raise RuntimeError('Player HTTP probe: ' + error_summary(error)) from None
+    try:
+        targets = get_json('http://127.0.0.1:9222/json/list')
+    except Exception as error:
+        raise RuntimeError('Chromium debug endpoint: ' + error_summary(error)) from None
     for target in targets:
         parsed = urlsplit(target.get('url', ''))
-        if target.get('type') != 'page' or parsed.hostname not in ('localhost', '127.0.0.1'):
+        if target.get('type') != 'page' or parsed.hostname not in ('localhost', '127.0.0.1', '::1'):
             continue
         if parsed.port != 8766 or not parsed.path.startswith('/player/'):
             continue
         debugger = target.get('webSocketDebuggerUrl', '')
-        if urlsplit(debugger).hostname not in ('localhost', '127.0.0.1'):
+        if urlsplit(debugger).hostname not in ('localhost', '127.0.0.1', '::1'):
             continue
         connection = websocket.create_connection(debugger, timeout=5,
                                                   suppress_origin=True,
-                                                  http_no_proxy=['localhost', '127.0.0.1'])
+                                                  http_no_proxy=['localhost', '127.0.0.1', '::1'])
         try:
             connection.send(json.dumps({'id': 7, 'method': 'Runtime.evaluate',
                                         'params': {'expression': 'document.readyState',
@@ -88,7 +106,8 @@ def main():
     try:
         healthy = active == 'active' and healthy_renderer()
     except Exception as error:
-        print(f'Xibo health probe failed: {type(error).__name__}', flush=True)
+        detail = str(error) if isinstance(error, RuntimeError) else error_summary(error)
+        print(f'Xibo health probe failed: {detail}', flush=True)
     now = time.time()
     action, failures = decide(active, healthy, state.get('failures', 0),
                               state.get('last_restart', 0), now, age=age)
@@ -110,4 +129,13 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['--probe']:
+        try:
+            healthy = healthy_renderer()
+            print('Xibo health: ' + ('healthy' if healthy else 'unresponsive or missing player page'))
+            sys.exit(0 if healthy else 1)
+        except Exception as error:
+            print('Xibo health: ' + str(error))
+            sys.exit(1)
+    else:
+        main()
