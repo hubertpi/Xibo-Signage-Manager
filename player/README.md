@@ -58,6 +58,10 @@ reboot the Pi, treat a CMS outage as a failure, or prove that every widget's
 content is advancing. Hardware, HDMI failures and a hung OS need separate
 monitoring; this is a process/browser watchdog.
 
+The HTTP check uses `localhost` to match the server's IPv4/IPv6 binding. Forcing
+`127.0.0.1` can falsely fail when Node binds only to `::1`. Run a check without
+restarting anything with `python3 /opt/xsm-player/watchdog.py --probe`.
+
 Before startup and after shutdown, the service closes any remaining Chromium
 processes owned by the desktop user that use the exact dedicated Xibo profile.
 This covers a browser surviving its launcher outside the service cgroup: without
