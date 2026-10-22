@@ -23,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Read version from Home Assistant config
         id: version
         shell: bash
@@ -36,6 +39,13 @@ jobs:
         run: python -m py_compile xibo_signage_manager/*.py
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+      - name: Verify counter rotation in Chromium
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/xsm-browser-tests/node_modules/playwright
+          CHROME_EXECUTABLE: /usr/bin/google-chrome
+        run: |
+          npm install --prefix "$RUNNER_TEMP/xsm-browser-tests" --no-package-lock --ignore-scripts playwright@1.62.1
+          node tests/check_counter_browser.cjs
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
