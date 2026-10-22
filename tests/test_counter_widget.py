@@ -12,7 +12,8 @@ class CounterWidgetTests(unittest.TestCase):
         markup = render_counter_markup(date(2026, 10, 1))
         self.assertIn('data-last-accident="2026-10-01"', markup)
         self.assertIn("Days Since Last Accident", markup)
-        self.assertNotIn("<img", markup)
+        self.assertIn('<text id="xsm-days"', markup)
+        self.assertIn('data:image/jpeg;base64,', markup)
 
     def test_blue_counter_has_daily_live_update(self):
         self.assertIn("Days Since Last Accident", render_counter_markup(date(2026, 10, 1)))

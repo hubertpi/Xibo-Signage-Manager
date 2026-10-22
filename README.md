@@ -1,6 +1,6 @@
 # Xibo Signage Manager
 
-Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.4.3`.
+Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.5.4`.
 
 ## Installation
 
@@ -52,3 +52,23 @@ The add-on now uses a single Embedded slideshow widget with an internally clippe
 ## Version 0.5.3 changes
 
 Adds a custom Home Assistant icon; logs version, startup, broker connection, sync completion, and graceful SIGTERM shutdown. For Xibo API HTTP 403 failures, the logs now identify the denied widget operation and explain required Xibo-side permissions. Embedded slideshow image URLs use Xibo library media placeholders (`[[mediaId=...]]`) instead of invalid bracket identifiers. Xibo widget permissions cannot be overridden from the add-on.
+
+## Version 0.5.4 changes
+
+The accident-counter region alternates between the live SVG count for 30 seconds
+and the supplied Safety First image for 6 seconds. Both changes slide right over
+800 ms and stay clipped inside the existing region. Durations are fully visible
+hold times, excluding transitions. The complete image is contained without crop
+or stretching. Its original JPG is bundled and embedded directly in the widget
+for offline playback; no manual CMS media upload is needed. The counter remains
+visible if the image cannot load. This varies the counter content but does not
+guarantee prevention of screen burn-in.
+
+The add-on also discovers a Current Layout sensor for every CMS display the API
+user can view. It checks every minute, discovers future displays automatically,
+updates display names and removes discovery for deleted displays. Each sensor is
+under its own Xibo display device linked to the Signage Manager. It uses reported
+`currentLayout`/`currentLayoutId`, never the assigned default. Missing reports,
+offline/deauthorised displays or failed CMS requests make the sensor unavailable.
+The Pi recipe includes a PWA 0.7.22 fix to report on layout start; existing Pis
+must apply the updated player patch once. Other player types need no recipe change.

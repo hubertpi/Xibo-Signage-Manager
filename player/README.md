@@ -111,6 +111,10 @@ the pins. No general-purpose shell command or shutdown control is exposed.
 * The bundled setup module imports playback code which also initializes on the
   setup page. A version-checked, backed-up DOM guard prevents the resulting
   setup/registration flashing loop. Unknown bundles fail without patching.
+* PWA 0.7.22 reports its layout only at layout end. The recipe also reports after
+  the renderer starts a layout and records its active ID, fixing delayed CMS
+  Current Layout information. The add-on discovers these reports as HA sensors
+  for all CMS displays, including future registrations.
 * Existing browser registration must be retained: deleting the profile generates
   a new hardware key and requires CMS authorization again.
 * Stock CMS 4.5.1 may report missing optional `GetWeather`/`ReportFaults` procedures

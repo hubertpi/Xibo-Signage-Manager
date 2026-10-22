@@ -17,7 +17,8 @@ class LiveLayoutTests(unittest.TestCase):
         self.assertIn('viewBox="0 0 1120 400"',text)
         self.assertIn('data-last-accident="2024-04-01"',text)
         self.assertIn('Days Since Last Accident',text)
-        self.assertNotIn('<img',text)
+        self.assertIn('<text id="xsm-days"',text)
+        self.assertIn('id="xsm-safety-image"',text)
         self.assertNotIn('<style',COUNTER_STYLE)
         self.assertIn("setInterval(update,60000)",COUNTER_SCRIPT.replace("window.",""))
 
