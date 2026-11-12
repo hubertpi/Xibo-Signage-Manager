@@ -1,0 +1,31 @@
+name: Build cafeteria Xibo SD image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify the image
+        run: python3 player/image/prepare-xibo-imager.py --build "$GITHUB_WORKSPACE/cafeteria-xibo.img"
+      - name: Compress and prepare Windows download
+        run: |
+          mkdir artifact
+          xz -T2 -2 -c cafeteria-xibo.img > artifact/cafeteria-xibo.img.xz
+          xz -t artifact/cafeteria-xibo.img.xz
+          cp player/image/Open-in-Imager.cmd artifact/
+          (cd artifact && sha256sum cafeteria-xibo.img.xz > SHA256SUMS.txt)
+      - name: Save flashable image
+        uses: actions/upload-artifact@v4
+        with:
+          name: cafeteria-xibo-pi4
+          path: artifact/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
