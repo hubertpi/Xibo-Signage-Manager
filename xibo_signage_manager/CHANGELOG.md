@@ -1,3 +1,7 @@
+## 0.5.7
+
+- Register slideshow images and PDF pages for player downloads while preserving their preview URLs.
+
 ## 0.5.6
 
 - Upload the Safety First image automatically to Xibo's media library and reuse

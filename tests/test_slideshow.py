@@ -1,3 +1,4 @@
+import re
 """Regression tests for folder-managed sequencing and time prefixes."""
 import pathlib
 import sys
@@ -111,6 +112,9 @@ class SlideFileTests(unittest.TestCase):
         self.assertIn('object-fit:contain', SLIDESHOW_STYLE)
         self.assertIn('data-url="[[mediaId=71]]" data-ms="10000"',payload["embedHtml"])
         self.assertIn('data-url="[[mediaId=72]]" data-ms="15000"',payload["embedHtml"])
+        # Match the numeric bracket references recognized by Xibo CMS 4.5.1.
+        refs = re.findall(r"\[(.*?)\]", payload["embedHtml"])
+        self.assertEqual([int(ref) for ref in refs if ref.isdecimal()], [71, 72])
         self.assertIn('translateX(-100%)',payload["embedScript"])
         self.assertEqual(payload["duration"],"3600")
 
