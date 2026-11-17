@@ -315,12 +315,13 @@ window.EmbedInit=init;
 def slideshow_payload(slides):
     """Generate a bounded, rounded, locally animated slideshow.
 
-    Xibo's [mediaId] substitutions in Embedded HTML register each referenced
-    library asset for Player download, including generated PDF page images.
+    The double-bracket token resolves the playback URL. Xibo CMS 4.5.1
+    also needs a separate numeric [id] token to register the file for download.
     """
     sources = "".join(
         f'<span class="xsm-source" data-url="[[mediaId={int(slide["media_id"])}]]" '
-        f'data-ms="{int(slide["duration"])*1000}"></span>'
+        f'data-ms="{int(slide["duration"])*1000}" '
+        f'data-xsm-library-ref="[{int(slide["media_id"])}]"></span>'
         for slide in slides
     )
     empty = '' if slides else '<div class="xsm-empty">No bulletins available</div>'
