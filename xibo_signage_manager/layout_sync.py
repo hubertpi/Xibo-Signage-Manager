@@ -136,7 +136,8 @@ def sync_live_layout(api,options,accident,slides):
     for key,title in (("events_ics_url","Events"),("birthdays_ics_url","Birthdays")):
         url=(options.get(key) or "").strip()
         try:
-            value=events_from_ics(url)
+            days = int(options.get("events_days", 30)) if key == "events_ics_url" else 30
+            value=events_from_ics(url, days=days)
         except Exception as exc:
             # Never replace working calendar entries with empty data on network failure.
             LOG.warning("%s calendar download/parse failed (%s)", title,
