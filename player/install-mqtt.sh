@@ -23,15 +23,6 @@ fi
     echo 'Run as the desktop account that owns the existing Xibo player service.' >&2
     exit 1
 }
-for name in player-start.sh player-stop.sh player-restart.sh check-updates.sh check-updates-user.sh; do
-    helper="/opt/xsm-player/$name"
-    [[ -x "$helper" && ! -L "$helper" && $(stat -c %u "$helper") == 0 ]] || {
-        echo "Required root-owned player helper is missing: $helper" >&2
-        exit 1
-    }
-    mode=$(stat -c %a "$helper")
-    (( (8#$mode & 022) == 0 )) || { echo "Unsafe player helper permissions: $helper" >&2; exit 1; }
-done
 sudo -v
 sudo apt-get update
 sudo apt-get install -y ca-certificates git python3 python3-venv python3-dev gcc
@@ -47,6 +38,12 @@ if [[ ! -f "$source_dir/configure.py" ]]; then
     git -C "$staging/repo" checkout -q --detach FETCH_HEAD
     source_dir="$staging/repo/player"
 fi
+# The SD image may omit MQTT-only control wrappers. Supply the validated helpers
+# before configuring the monitor; installing scripts does not execute them.
+sudo install -d -o root -g root -m 0755 /opt/xsm-player
+for name in control.sh player-start.sh player-stop.sh player-restart.sh check-updates.sh check-updates-user.sh; do
+    sudo install -o root -g root -m 0755 "$source_dir/$name" "/opt/xsm-player/$name"
+done
 # Import just the monitor configurator: don't write player settings or restart it.
 python3 -c 'import sys, getpass; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from configure import configure_monitor; configure_monitor(Path.home(), getpass.getuser())' "$source_dir" </dev/tty
 monitor_root="$HOME/.local/share/xsm-player/rpi-mqtt-monitor"
