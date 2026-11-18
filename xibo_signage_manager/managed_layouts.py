@@ -30,7 +30,8 @@ def layout_sources(options):
         scope = hashlib.sha256(str(folder).encode()).hexdigest()[:16]
         selected = dict(options, counter_layout_name=name, bulletin_folder=str(folder),
                         media_tag=f"{options['media_tag']}_{scope}",
-                        events_ics_url=entry.get("events_ics_url") or "")
+                        events_ics_url=entry.get("events_ics_url") or "",
+                        events_heading=entry.get("events_heading") or "Upcoming Events")
         # Omission inherits the shared birthdays feed; an explicit empty value disables it.
         if "birthdays_ics_url" in entry:
             selected["birthdays_ics_url"] = entry["birthdays_ics_url"]

@@ -1,6 +1,6 @@
 # Xibo Signage Manager
 
-Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.6.0`.
+Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.6.1`.
 
 ## Additional layouts
 
@@ -11,12 +11,14 @@ manage other layouts with the same design and independent media/calendars:
 counter_layout_name: Main Digital Bulletin - 4K
 additional_layouts:
   - name: Design Engineers
+    events_heading: Design Engineer Schedule
     bulletin_folder: /share/digital_signage/Design Engineers
     events_ics_url: "PASTE_PRIVATE_ICAL_URL_IN_ADDON_CONFIGURATION"
 ```
 
 Enter private calendar URLs only in Home Assistant add-on configuration, never
-in repository files. Each additional layout uses its own events calendar. The
+in repository files. Each additional layout uses its own events calendar. Set `events_heading` on an
+additional layout to replace the default Upcoming Events heading. The
 birthdays feed and accident date are inherited from the main settings; optionally
 set `birthdays_ics_url` on an additional layout to override it (empty disables it).
 

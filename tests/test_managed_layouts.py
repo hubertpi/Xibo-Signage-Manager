@@ -18,7 +18,8 @@ class ManagedLayoutsTests(unittest.TestCase):
                     birthdays_ics_url='https://example.test/birthdays.ics',
                     additional_layouts=[dict(name='Design Engineers',
                         bulletin_folder=str(root / 'Design Engineers'),
-                        events_ics_url='https://example.test/design.ics')])
+                        events_ics_url='https://example.test/design.ics',
+                        events_heading='Design Engineer Schedule')])
 
     def test_each_feed_uses_its_own_events_and_shared_birthdays(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -28,6 +29,8 @@ class ManagedLayoutsTests(unittest.TestCase):
             self.assertEqual(extra['options']['events_ics_url'], 'https://example.test/design.ics')
             self.assertEqual(extra['options']['birthdays_ics_url'], options['birthdays_ics_url'])
             self.assertNotEqual(main['options']['media_tag'], extra['options']['media_tag'])
+            self.assertEqual(extra['options']['events_heading'], 'Design Engineer Schedule')
+            self.assertNotIn('events_heading', options)
             options['additional_layouts'][0]['birthdays_ics_url'] = ''
             self.assertEqual(layout_sources(options)[1]['options']['birthdays_ics_url'], '')
 
