@@ -91,6 +91,19 @@ draw its own local cursor. The installer cannot verify that remotely.
 
 ## Home Assistant management
 
+For a Pi already running the Xibo player (including the cafeteria SD image), add
+monitoring without rerunning player, desktop, or network setup. SSH in as the
+existing desktop user and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hubertpi/Xibo-Signage-Manager/main/player/install-mqtt.sh -o /tmp/xsm-install-mqtt.sh && bash /tmp/xsm-install-mqtt.sh
+```
+
+The monitor-only installer prompts for the broker's LAN address, port, username,
+password, and TLS setting. Existing monitor credentials are retained. It starts
+`xsm-rpi-mqtt-monitor.service` and does not stop or reconfigure the player.
+If the broker is rebooting, discovery follows after it becomes reachable.
+
 Optional MQTT support uses [hjelev/rpi-mqtt-monitor](https://github.com/hjelev/rpi-mqtt-monitor),
 pinned to `e641464d74b924b8b3e7fecf3a9580ba0b3554bc` in a user-owned virtual environment.
 Its existing MQTT discovery creates a device using the Pi's hostname, with CPU,
