@@ -9,7 +9,7 @@ from unittest.mock import patch, Mock
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "xibo_signage_manager"))
 from counter_widget import render_counter_markup, COUNTER_STYLE, COUNTER_SCRIPT, get_widget_option
 from calendar_widget import render_calendar, CAL_STYLE, CAL_SCRIPT, events_from_ics
-from layout_sync import find_parts, _clock_region_updates, CLOCK_GEOMETRY
+from layout_sync import find_parts, _clock_region_updates, CLOCK_GEOMETRY, sync_live_layout
 
 class LiveLayoutTests(unittest.TestCase):
     def test_counter_is_svg_text_and_not_clipped_giant_html_font(self):
@@ -102,6 +102,66 @@ class LiveLayoutTests(unittest.TestCase):
                 now=dt.datetime(2026, 10, 21, 12, tzinfo=ZoneInfo("America/Chicago")),
             )
         self.assertEqual([e["name"] for e in found], ["Today", "Day 29"])
+
+    def test_today_only_uses_chicago_day_and_recurring_occurrences(self):
+        ics = b"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//XSM Test//EN
+BEGIN:VEVENT
+UID:all-day
+DTSTART;VALUE=DATE:20261118
+SUMMARY:Today all-day
+END:VEVENT
+BEGIN:VEVENT
+UID:tomorrow
+DTSTART;VALUE=DATE:20261119
+SUMMARY:Tomorrow
+END:VEVENT
+BEGIN:VEVENT
+UID:tonight
+DTSTART:20261119T003000Z
+SUMMARY:Today Chicago evening
+END:VEVENT
+BEGIN:VEVENT
+UID:midnight
+DTSTART:20261119T060000Z
+SUMMARY:Tomorrow Chicago midnight
+END:VEVENT
+BEGIN:VEVENT
+UID:repeat
+DTSTART;TZID=America/Chicago:20261117T090000
+RRULE:FREQ=DAILY;COUNT=4
+SUMMARY:Daily engineer meeting
+END:VEVENT
+END:VCALENDAR
+"""
+        with patch("calendar_widget.requests.get", return_value=Mock(content=ics)):
+            found = events_from_ics("https://example.test/design.ics", days=1,
+                                    now=dt.datetime(2026,11,19,2,tzinfo=dt.timezone.utc))
+            normal = events_from_ics("https://example.test/design.ics",
+                                     now=dt.datetime(2026,11,19,2,tzinfo=dt.timezone.utc))
+        self.assertEqual({e["name"] for e in found},
+                         {"Today all-day", "Today Chicago evening", "Daily engineer meeting"})
+        self.assertTrue(all(e["date"] == "2026-11-18" for e in found))
+        self.assertIn("Tomorrow", {e["name"] for e in normal})
+
+    def test_today_setting_does_not_shorten_birthdays(self):
+        layout = {"layoutId":40,"regions":[
+            {"name":"Bulletin Slideshow","regionPlaylist":{"playlistId":1,"widgets":[]}},
+            {"name":"Events Birthdays","regionPlaylist":{"playlistId":2,"widgets":[{"type":"embedded"}]}},
+            {"name":"Accident Counter","regionPlaylist":{"playlistId":3,"widgets":[{"type":"embedded"}]}}]}
+        options = dict(counter_layout_name="Design Engineers", events_days=1,
+                       events_ics_url="https://example.test/design.ics",
+                       birthdays_ics_url="https://example.test/birthdays.ics")
+        with patch("layout_sync._get_layouts",return_value=[layout]), \
+             patch("layout_sync.events_from_ics",return_value=[]) as fetch, \
+             patch("layout_sync.ensure_safety_media",side_effect=RuntimeError("stop after calendar fetch")):
+            accident = Mock()
+            accident.read_text.return_value = "2020-01-01"
+            with self.assertRaisesRegex(RuntimeError,"stop after calendar fetch"):
+                sync_live_layout(Mock(), options, accident, [])
+            self.assertEqual(fetch.call_args_list[0].kwargs, {"days":1})
+            self.assertEqual(fetch.call_args_list[1].kwargs, {"days":30})
 
     def test_ics_empty_setting_never_fetches_network(self):
         self.assertIsNone(events_from_ics(""))

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from layout_sync import _get_layouts, sync_live_layout
 from slideshow import rename_bulletins, sync_media, cleanup_assets
+from video_layout import sync_video_source
 
 LOG = logging.getLogger("xibo-signage")
 
@@ -26,12 +27,20 @@ def layout_sources(options):
             raise ValueError("Managed layouts must have distinct names and bulletin folders")
         names.add(name.casefold())
         folders.add(folder)
+        kind = entry.get("layout_type") or "bulletin"
+        if kind not in ("bulletin", "video"):
+            raise ValueError("layout_type must be bulletin or video")
+        days = entry.get("events_days", 30)
+        if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 365:
+            raise ValueError("events_days must be an integer from 1 to 365")
         # A layout rename must not discard its existing media ownership records.
         scope = hashlib.sha256(str(folder).encode()).hexdigest()[:16]
         selected = dict(options, counter_layout_name=name, bulletin_folder=str(folder),
                         media_tag=f"{options['media_tag']}_{scope}",
                         events_ics_url=entry.get("events_ics_url") or "",
-                        events_heading=entry.get("events_heading") or "Upcoming Events")
+                        events_heading=entry.get("events_heading") or "Upcoming Events",
+                        events_days=days, layout_type=kind,
+                        video_mute=entry.get("video_mute", True))
         # Omission inherits the shared birthdays feed; an explicit empty value disables it.
         if "birthdays_ics_url" in entry:
             selected["birthdays_ics_url"] = entry["birthdays_ics_url"]
@@ -70,6 +79,14 @@ def sync_sources(api, options, state, save_state, accident, cache_root):
             if scope:
                 # Create only the explicitly configured leaf; don't hide a missing share mount.
                 folder.mkdir(exist_ok=True)
+            if source["options"].get("layout_type") == "video":
+                video_state = state.setdefault("layout_sources", {}).setdefault(scope, {})
+                completed = sync_video_source(api, source["options"], folder, video_state, save_state)
+                result["connected"] = True
+                result["pending"] |= not completed
+                result["files"] += int(completed)
+                result["slides"] += int(completed)
+                continue
             records = rename_bulletins(folder)
             if records is None:
                 result["pending"] = True

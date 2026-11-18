@@ -1,6 +1,6 @@
 # Xibo Signage Manager
 
-Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.6.1`.
+Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.7.0`.
 
 ## Additional layouts
 
@@ -12,6 +12,7 @@ counter_layout_name: Main Digital Bulletin - 4K
 additional_layouts:
   - name: Design Engineers
     events_heading: Design Engineer Schedule
+    events_days: 1
     bulletin_folder: /share/digital_signage/Design Engineers
     events_ics_url: "PASTE_PRIVATE_ICAL_URL_IN_ADDON_CONFIGURATION"
 ```
@@ -38,6 +39,41 @@ and state stay in place. With `additional_layouts: []` behavior stays unchanged.
 New layouts are **not scheduled automatically**. Assign the new layout only to
 the intended displays using the CMS Schedule page. Existing schedules, default
 layouts, and player configuration are unchanged.
+
+
+### Today-only engineer schedule
+
+Set `events_days: 1` on the Design Engineers entry to show only the current
+America/Chicago calendar day, including today's recurring and all-day entries.
+It refreshes on the regular synchronization interval. Omitting this option keeps
+the 30-day events window. Birthdays keep their separate 30-day window.
+
+### Full-screen video layout
+
+Add this as another entry in the existing `additional_layouts` list:
+
+```yaml
+  - name: Lobby Safety
+    layout_type: video
+    bulletin_folder: /share/digital_signage/Lobby Safety
+    video_mute: true
+```
+
+The add-on creates the folder and a new independent landscape layout. Put exactly
+one MP4 (H.264 video, AAC audio) or WebM in this folder. The native Xibo video
+widget fills the layout, preserves aspect ratio, plays the file at its natural
+length, and repeats. It uses normal Xibo media dependencies so players download
+the video. Filename timing prefixes are not used. A video upload instructions
+file is created in the folder. Set `video_mute: false` if audio is wanted.
+
+An empty folder leaves a new layout unpublished until its video is supplied.
+While replacement files are copying, or if multiple videos are present, the
+previous published video is retained. Old video media are removed only after a
+replacement layout successfully publishes. Video layouts have their own media
+ownership and do not contain the bulletin's calendar, clocks, or counter.
+
+Assign **Lobby Safety** to the intended displays through the CMS Schedule page;
+creating the layout does not alter existing schedules or default layouts.
 
 
 ## Installation

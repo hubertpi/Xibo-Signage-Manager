@@ -1,3 +1,13 @@
+## 0.7.0
+
+- Add events_days per additional layout: use 1 for today's Design Engineer
+  Schedule in America/Chicago. Other calendars and birthdays keep 30 days.
+- Add independent full-screen video layouts, including Lobby Safety, with their
+  own upload folders, native downloadable video widget, and natural-duration repeat.
+- Retain the published video during incomplete uploads, empty/multiple-file
+  folders, or failed publishing. Purge old video media only after publication.
+- Create video instructions in each video folder. Preserve existing schedules.
+
 ## 0.6.1
 
 - Allow a separate calendar heading on each additional layout, such as

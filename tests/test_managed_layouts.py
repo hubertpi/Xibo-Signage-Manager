@@ -19,7 +19,7 @@ class ManagedLayoutsTests(unittest.TestCase):
                     additional_layouts=[dict(name='Design Engineers',
                         bulletin_folder=str(root / 'Design Engineers'),
                         events_ics_url='https://example.test/design.ics',
-                        events_heading='Design Engineer Schedule')])
+                        events_heading='Design Engineer Schedule', events_days=1)])
 
     def test_each_feed_uses_its_own_events_and_shared_birthdays(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -31,8 +31,37 @@ class ManagedLayoutsTests(unittest.TestCase):
             self.assertNotEqual(main['options']['media_tag'], extra['options']['media_tag'])
             self.assertEqual(extra['options']['events_heading'], 'Design Engineer Schedule')
             self.assertNotIn('events_heading', options)
+            self.assertEqual(extra['options']['events_days'], 1)
+            self.assertNotIn('events_days', options)
             options['additional_layouts'][0]['birthdays_ics_url'] = ''
             self.assertEqual(layout_sources(options)[1]['options']['birthdays_ics_url'], '')
+
+    def test_video_source_routes_without_slideshow_or_calendar_updates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            options = self.options(root)
+            options['additional_layouts'] = [dict(name='Lobby Safety', layout_type='video',
+                                                  bulletin_folder=str(root / 'Lobby Safety'))]
+            with patch('managed_layouts.rename_bulletins', return_value=[]), \
+                 patch('managed_layouts.sync_media', return_value=([], set())), \
+                 patch('managed_layouts.sync_live_layout') as bulletin, \
+                 patch('managed_layouts.cleanup_assets'), \
+                 patch('managed_layouts.sync_video_source', return_value=True) as video:
+                result = sync_sources(Mock(), options, {}, Mock(), root / 'date', root / 'cache')
+                self.assertEqual(result['problems'], [])
+                self.assertEqual(bulletin.call_count, 1)
+                self.assertEqual(video.call_count, 1)
+                self.assertEqual(video.call_args.args[1]['counter_layout_name'], 'Lobby Safety')
+                self.assertTrue((root / 'Lobby Safety').is_dir())
+
+    def test_invalid_event_days_and_layout_types_are_rejected(self):
+        for field, value in [('events_days', 0), ('events_days', True), ('events_days', 366),
+                             ('events_days', 'today'), ('layout_type', 'unknown')]:
+            with self.subTest(field=field, value=value):
+                options = self.options(pathlib.Path('/share/digital_signage'))
+                options['additional_layouts'][0][field] = value
+                with self.assertRaises(ValueError):
+                    layout_sources(options)
 
     def test_legacy_configuration_keeps_primary_ownership(self):
         options = self.options(pathlib.Path('/share/digital_signage'))
