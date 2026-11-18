@@ -1,3 +1,8 @@
+## 0.6.1
+
+- Allow a separate calendar heading on each additional layout, such as
+  "Design Engineer Schedule", while preserving the main bulletin heading.
+
 ## 0.6.0
 
 - Manage additional layouts with separate slideshow folders and events calendars.

@@ -151,7 +151,8 @@ def sync_live_layout(api,options,accident,slides):
         raise LookupError("Expected an Embedded accident counter and Events/Birthdays widget")
     safety_media_id=ensure_safety_media(api)
     cp=build_widget_payload(day,counter,safety_media_id)
-    calp=build_calendar_payload(events,birthdays,calendar,get_widget_option)
+    calp=build_calendar_payload(events,birthdays,calendar,get_widget_option,
+                                    options.get("events_heading") or "Upcoming Events")
     need_counter=widget_needs_update(counter,cp)
     need_calendar=widget_needs_update(calendar,calp)
     clock_updates=_clock_region_updates(layout)
@@ -179,7 +180,8 @@ def sync_live_layout(api,options,accident,slides):
         counter=_widget(parts,"counter")
         calendar=_widget(parts,"calendar")
         cp=build_widget_payload(day,counter,safety_media_id)
-        calp=build_calendar_payload(events,birthdays,calendar,get_widget_option)
+        calp=build_calendar_payload(events,birthdays,calendar,get_widget_option,
+                                    options.get("events_heading") or "Upcoming Events")
         need_counter=widget_needs_update(counter,cp)
         need_calendar=widget_needs_update(calendar,calp)
         clock_updates=_clock_region_updates(layout)

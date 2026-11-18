@@ -31,6 +31,14 @@ class LiveLayoutTests(unittest.TestCase):
         self.assertIn("Nothing scheduled",body)
         self.assertNotIn("<style",CAL_STYLE)
 
+    def test_custom_heading_changes_only_the_events_panel_and_is_escaped(self):
+        text = render_calendar([], [], "Design Engineer Schedule")
+        self.assertIn('class="xsm-heading">Design Engineer Schedule</div>', text)
+        self.assertIn('class="xsm-heading">Birthdays</div>', text)
+        self.assertNotIn("Upcoming Events", text)
+        self.assertIn("Upcoming Events", render_calendar([], []))
+        self.assertIn("&lt;Design &amp; Schedule&gt;", render_calendar([], [], "<Design & Schedule>"))
+
     def test_calendar_unconfigured_is_explicit(self):
         text=render_calendar(None,None)
         self.assertIn("Events calendar not connected",text)

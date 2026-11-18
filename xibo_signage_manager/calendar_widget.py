@@ -85,17 +85,17 @@ def _rows(items,missing_message):
         result.append(f'<div class="xsm-item"><div class="xsm-day">{day}</div><div class="xsm-body">{time_tag}<span class="xsm-name">{title}</span></div></div>')
     return "".join(result)
 
-def render_calendar(events,birthdays):
+def render_calendar(events,birthdays,events_heading="Upcoming Events"):
     return ('<div id="xsm-calendar" data-xsm-calendar="1">'
-            '<div class="xsm-panel" data-panel="events"><div class="xsm-heading">Upcoming Events</div>'
+            '<div class="xsm-panel" data-panel="events"><div class="xsm-heading">'+html.escape(events_heading, quote=True)+'</div>'
             '<div class="xsm-list" id="xsm-events">'+_rows(events,"Events calendar not connected")+'</div></div>'
             '<div class="xsm-panel" data-panel="birthdays"><div class="xsm-heading">Birthdays</div>'
             '<div class="xsm-list" id="xsm-birthdays">'+_rows(birthdays,"Birthdays calendar not connected")+'</div></div></div>')
 
-def build_calendar_payload(events,birthdays,widget,read_option):
+def build_calendar_payload(events,birthdays,widget,read_option,events_heading="Upcoming Events"):
     return {"name":WIDGET_NAME,"useDuration":"1",
             "duration":str(widget.get("duration") or 3600),
             "enableStat":read_option(widget,"enableStat") or "Inherit",
             "transparency":"1","scaleContent":"1","isPreNavigate":"0",
-            "embedHtml":render_calendar(events,birthdays),
+            "embedHtml":render_calendar(events,birthdays,events_heading),
             "embedStyle":CAL_STYLE,"embedScript":CAL_SCRIPT,"embedJavaScript":""}
