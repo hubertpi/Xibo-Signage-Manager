@@ -1,6 +1,42 @@
 # Xibo Signage Manager
 
-Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.5.7`.
+Home Assistant add-on for Xibo CMS 4.5.1; full automatic synchronization from a Samba bulletin folder, incident date file, and two optional ICS calendars. Precompiled image for amd64 and aarch64: `ghcr.io/hubertpi/xibo-signage-manager:0.6.0`.
+
+## Additional layouts
+
+Keep the existing main layout options and add an `additional_layouts` list to
+manage other layouts with the same design and independent media/calendars:
+
+```yaml
+counter_layout_name: Main Digital Bulletin - 4K
+additional_layouts:
+  - name: Design Engineers
+    bulletin_folder: /share/digital_signage/Design Engineers
+    events_ics_url: "PASTE_PRIVATE_ICAL_URL_IN_ADDON_CONFIGURATION"
+```
+
+Enter private calendar URLs only in Home Assistant add-on configuration, never
+in repository files. Each additional layout uses its own events calendar. The
+birthdays feed and accident date are inherited from the main settings; optionally
+set `birthdays_ics_url` on an additional layout to override it (empty disables it).
+
+On the first sync the add-on creates the specified folder if its parent exists,
+then copies the published main layout if the additional layout does not yet
+exist. It updates that copy's slideshow and calendars and publishes it. This
+preserves the geometry, clocks, counter, and safety image. Later design changes
+to the main layout are not automatically copied. Layout names must be unique.
+
+Each folder has separate upload tracking, media tags, titles, and PDF cache.
+Removing a slide from one folder cannot purge another folder's media. A failed
+calendar download or locked layout retains that feed's existing media while
+other feeds can continue syncing. Removing a configuration entry stops managing
+that layout; it does not delete its layout or media. Existing primary media IDs
+and state stay in place. With `additional_layouts: []` behavior stays unchanged.
+
+New layouts are **not scheduled automatically**. Assign the new layout only to
+the intended displays using the CMS Schedule page. Existing schedules, default
+layouts, and player configuration are unchanged.
+
 
 ## Installation
 
