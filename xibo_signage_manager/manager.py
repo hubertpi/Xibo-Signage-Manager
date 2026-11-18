@@ -19,7 +19,7 @@ import requests
 import paho.mqtt.client as mqtt
 from counter_widget import counter_targets, render_counter_markup, get_widget_option, WIDGET_NAME, COUNTER_STYLE, COUNTER_SCRIPT, ensure_safety_media
 from layout_sync import sync_live_layout
-from slideshow import rename_bulletins, sync_media, cleanup_assets
+from managed_layouts import sync_sources
 from display_layouts import DisplayLayoutMonitor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -217,38 +217,23 @@ def sync():
     LOG.info("Synchronization started: %s", PATH)
     problems = []
     try:
-        records = rename_bulletins(PATH)
-        RUNTIME["connection"] = True
-        if records is None:
-            # At least one upload is incomplete. Leave the previous layout
-            # intact until all files are stable.
-            RUNTIME["status"] = "waiting for file copy"
-            return
-        RUNTIME["bulletins"] = len(records)
-        LOG.info("Found %d bulletin files", len(records))
-        slides, used = sync_media(
-            api, records, STATE, save_state,
-            pathlib.Path("/config/xsm_pdf_pages"), TAG)
-        LOG.info("Xibo media library accessible; prepared %d slideshow images/pages", len(slides))
-        try:
-            sync_live_layout(api, OPTIONS, ACCIDENT, slides)
-            cleanup_assets(api, STATE, used, save_state)
-        except (LookupError, ValueError, OSError, requests.HTTPError, RuntimeError) as exc:
-            LOG.warning("Live Xibo layout not yet synchronized: %s", exc)
-            problems.append(f"Layout: {exc}")
-        except Exception as exc:
-            LOG.exception("Live Xibo layout synchronization failed")
-            problems.append(f"Counter: {exc}")
+        outcome = sync_sources(api, OPTIONS, STATE, save_state, ACCIDENT,
+                               pathlib.Path("/config/xsm_pdf_pages"))
+        RUNTIME["connection"] = outcome["connected"]
+        RUNTIME["bulletins"] = outcome["files"]
+        problems = outcome["problems"]
         if problems:
             RUNTIME["errors"] += len(problems)
             RUNTIME["last_error"] = " | ".join(problems)[:500]
             RUNTIME["status"] = "warning"
             LOG.warning("Synchronization incomplete: %s", RUNTIME["last_error"])
+        elif outcome["pending"]:
+            RUNTIME["status"] = "waiting for file copy"
         else:
             RUNTIME["last_error"] = ""
             RUNTIME["status"] = "idle"
             RUNTIME["last_sync"] = dt.datetime.now(dt.timezone.utc).isoformat()
-            LOG.info("Synchronization successful: %d files, %d images/pages; running normally", len(records), len(slides))
+            LOG.info("Synchronization successful: %d files, %d images/pages; running normally", outcome["files"], outcome["slides"])
     except Exception as exc:
         LOG.exception("Synchronization failed")
         RUNTIME["connection"] = False

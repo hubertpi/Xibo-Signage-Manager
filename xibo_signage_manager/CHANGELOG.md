@@ -1,3 +1,12 @@
+## 0.6.0
+
+- Manage additional layouts with separate slideshow folders and events calendars.
+- Copy the published main design once for each new layout; inherit birthdays and
+  the shared incident date. Leave display schedules and defaults unchanged.
+- Isolate upload tracking, media titles/tags, PDF caches, and deletion per folder.
+- Continue syncing other feeds when one layout is locked or its calendar fails.
+- Avoid logging private calendar URLs on download/parse errors.
+
 ## 0.5.7
 
 - Register slideshow images and PDF pages for player downloads while preserving their preview URLs.

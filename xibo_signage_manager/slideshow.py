@@ -180,7 +180,7 @@ def _legacy_match(state,original,digest):
             return record
     return None
 
-def sync_media(api,records,state,save_state,cache_root,media_tag):
+def sync_media(api,records,state,save_state,cache_root,media_tag,title_prefix="XSM - "):
     """Keep stable Xibo media IDs across changes to order/duration prefixes."""
     import mimetypes
     assets = state.setdefault("slide_assets",{})
@@ -199,7 +199,7 @@ def sync_media(api,records,state,save_state,cache_root,media_tag):
             sources = [(original,path,None)]
         for key,source,page in sources:
             used.add(key)
-            title = "XSM - "+entry["desired_name"]+(
+            title = title_prefix+entry["desired_name"]+(
                 f" [Page {page}]" if page else "")
             source_hash = file_hash(source)
             prior = assets.get(key)

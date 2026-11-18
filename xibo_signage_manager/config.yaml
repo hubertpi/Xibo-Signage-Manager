@@ -1,5 +1,5 @@
 name: Xibo Signage Manager
-version: "0.5.7"
+version: "0.6.0"
 image: ghcr.io/hubertpi/xibo-signage-manager
 slug: xibo_signage_manager
 description: Synchronize Samba bulletin media into Xibo CMS and expose MQTT controls.
@@ -30,6 +30,7 @@ options:
   counter_layout_name: Main Digital Bulletin - 4K Replica
   events_ics_url: ""
   birthdays_ics_url: ""
+  additional_layouts: []
 schema:
   xibo_url: str
   xibo_client_id: str
@@ -45,3 +46,8 @@ schema:
   counter_layout_name: str
   events_ics_url: str?
   birthdays_ics_url: str?
+  additional_layouts:
+    - name: str
+      bulletin_folder: str
+      events_ics_url: str?
+      birthdays_ics_url: str?

@@ -139,8 +139,8 @@ def sync_live_layout(api,options,accident,slides):
             value=events_from_ics(url)
         except Exception as exc:
             # Never replace working calendar entries with empty data on network failure.
-            LOG.warning("%s calendar download/parse failed: %s",title,
-                        str(exc).split("?")[0][:200])
+            LOG.warning("%s calendar download/parse failed (%s)", title,
+                        type(exc).__name__)
             raise RuntimeError(f"{title} ICS download failed; prior calendar retained") from None
         if key=="events_ics_url":events=value
         else:birthdays=value
