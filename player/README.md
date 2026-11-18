@@ -100,7 +100,8 @@ curl -fsSL https://raw.githubusercontent.com/hubertpi/Xibo-Signage-Manager/main/
 ```
 
 The monitor-only installer prompts for the broker's LAN address, port, username,
-password, and TLS setting. Existing monitor credentials are retained. It starts
+password, and TLS setting. It supplies the root-owned MQTT control helpers
+if the SD image omitted them. Existing monitor credentials are retained. It starts
 `xsm-rpi-mqtt-monitor.service` and does not stop or reconfigure the player.
 If the broker is rebooting, discovery follows after it becomes reachable.
 
